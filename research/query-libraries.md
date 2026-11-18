@@ -8,12 +8,12 @@
 
 - **clap 4.6.8** 能承担参数收集、别名、重复、空模式和 `OsString` 保真。需要的小适配是裸命令的成功帮助、产品参数验证以及字段组合，不需要自行编写 CLI 解析器。探针实际解析器依赖为 **clap_builder 4.6.7**。[clap 发布版本](https://crates.io/api/v1/crates/clap/4.6.8)、[clap 4.6.8 源码包](https://static.crates.io/crates/clap/clap-4.6.8.crate)
 - **regex 1.13.2** 可直接承担正则子串匹配与 Unicode 简单大小写折叠（simple case folding）；它不直接接收非良构 UTF-16，也不支持回溯引用及前后查找。无损名称与可解释的匹配文本应是两个层次。[regex 1.13.2 文档](https://docs.rs/regex/1.13.2/regex/)、[源码包](https://static.crates.io/crates/regex/regex-1.13.2.crate)
-- **yash-fnmatch 1.1.2 的公开 AST→regex 接口是保持当前 Unicode glob 契约的更适配候选**：已有解析器负责 `* / ? / []`，使用 `without_escape` 保留字面 `/`、`\`，公开 AST 可白名单排除未承诺的 POSIX 扩展，再交 regex 统一 Unicode 大小写。KEY 的分层和独立 `**` 只需领域组件适配。globset 0.4.21 的直接路径 API 则有实际差异，不能只靠配置满足契约。[yash-fnmatch 1.1.2 发布源码](https://static.crates.io/crates/yash-fnmatch/yash-fnmatch-1.1.2.crate)、[globset 语法](https://docs.rs/globset/0.4.21/globset/)
+- **yash-fnmatch 1.1.2 的公开 AST→regex 接口可保留当前 Unicode glob 契约，随后已获用户采用**：已有解析器负责 `* / ? / []`，使用 `without_escape` 保留字面 `/`、`\`，公开 AST 可白名单排除未承诺的 POSIX 扩展，再交 regex 统一 Unicode 大小写。KEY 的分层和独立 `**` 只需领域组件适配。globset 0.4.21 的直接路径 API 则有实际差异，不能只靠配置满足契约。[yash-fnmatch 1.1.2 发布源码](https://static.crates.io/crates/yash-fnmatch/yash-fnmatch-1.1.2.crate)、[globset 语法](https://docs.rs/globset/0.4.21/globset/)
 - **chrono 0.4.45 + humantime 2.4.0** 可组合覆盖本地日期、带偏移 RFC 3339 和固定时长。统一查询时刻、严格输入词法以及本地午夜的歧义策略仍由小范围产品适配承担。[chrono](https://docs.rs/chrono/0.4.45/chrono/)、[humantime](https://docs.rs/humantime/2.4.0/humantime/)
 - **环境快照不需要额外环境管理 crate**：标准库 `vars_os()` 已有快照保证；现有 `regex::replace_all` 闭包可以只查这份 Map，单遍替换、不递归并保留未知引用。Windows 名称比较、特殊百分号和非良构环境值仍需明确。[Rust vars_os](https://doc.rust-lang.org/std/env/fn.vars_os.html)、[regex 替换](https://docs.rs/regex/1.13.2/regex/struct.Regex.html#method.replace_all)
 - **标准库 OsString / `[u16]` 已能保留 Windows 字符串，无需新增 widestring 依赖**；本报告也核实了可选 widestring 1.2.1。**hex 0.4.3** 可解码原始字节查询参数；**ctrlc 3.5.3** 能接收取消事件。字符串布局解释、取消检查及退出 130 是项目责任，库不会代替产品决定。[widestring](https://docs.rs/widestring/1.2.1/widestring/)、[hex 0.4.3](https://docs.rs/hex/0.4.3/hex/)、[ctrlc 3.5.3 源码包](https://static.crates.io/crates/ctrlc/ctrlc-3.5.3.crate)
 
-以上是有证据的候选及缺口，不是已决定的依赖清单。以 crates.io 发布元数据及源码包确证版本，未把 GitHub `main` 当发布版；检索时部分 docs.rs `latest` 缓存仍显示 globset 0.4.20 / ctrlc 3.5.2，实际已发布源码分别为 0.4.21 / 3.5.3。
+以上先为事实调查结论；调研期间用户随后接受 clap / regex / yash-fnmatch / chrono + humantime / hex / ctrlc 的组合，名称保真采用标准库 OsString，无需新增 widestring。报告不自行替用户作决定，也不代表依赖或 CLI 已实施。以 crates.io 发布元数据及源码包确证版本，未把 GitHub `main` 当发布版；检索时部分 docs.rs `latest` 缓存仍显示 globset 0.4.20 / ctrlc 3.5.2，实际已发布源码分别为 0.4.21 / 3.5.3。
 
 ## clap：已有解析器与产品语义的分工
 
@@ -40,7 +40,7 @@
 
 **文档与实测**：`Regex::is_match` 默认搜索子串；`Path` 命中 `InstallPath`，空正则可以命中空位置。`RegexBuilder::case_insensitive(true)` 按 Unicode 简单大小写折叠；`É` 命中 `é`，但 `ß` 不因完整折叠而命中 `ss`。键 / 值名的 builder 默认可开启该选项，数据条件各自单独配置，不能由相邻参数改变。[Regex](https://docs.rs/regex/1.13.2/regex/struct.Regex.html)、[RegexBuilder](https://docs.rs/regex/1.13.2/regex/struct.RegexBuilder.html)
 
-**语法边界**：支持锚点、Unicode 类、交替、重复、分组和内联标志；不支持 look-around 或 backreference，`(?=a)`、`(a)\1` 实测编译报错。`.` 默认不含换行，`(?s)` 可开启；`(?m)` 改变行锚点，整串要求可用 `\A...\z`。内联 `(?-i)` 可覆盖外层 builder 的大小写默认值；若产品要禁止覆盖，就需要额外决定，不能声称 builder 强制了不可覆盖的规则。[regex 语法、Unicode 与复杂度](https://docs.rs/regex/1.13.2/regex/)
+**语法边界**：支持锚点、Unicode 类、交替、重复、分组和内联标志；不支持 look-around 或 backreference，`(?=a)`、`(a)\1` 实测编译报错。`.` 默认不含换行，`(?s)` 可开启；`(?m)` 改变行锚点，整串要求可用 `\A...\z`。内联 `(?-i)` 可覆盖外层 builder 的大小写默认值；用户随后接受库原生内联标志覆盖默认值，不能声称 builder 强制了不可覆盖的规则。[regex 语法、Unicode 与复杂度](https://docs.rs/regex/1.13.2/regex/)
 
 匹配对象是 `&str`，即合法 UTF-8；模式本身也要是 `&str`。`regex::bytes` 可以匹配任意字节，但没有把 UTF-16 代码单元（code unit）作为字符的保证。把孤立代理项转成替换字符、把 UTF-16 原始字节交给 UTF-8 正则，或匹配输出用的 `\u{D800}` 文字，都会改变字段含义。Windows `OsString::from_wide` / `encode_wide` 则明确保证非良构 UTF-16 往返无损。[bytes::Regex](https://docs.rs/regex/1.13.2/regex/bytes/struct.Regex.html)、[OsStringExt](https://doc.rust-lang.org/std/os/windows/ffi/trait.OsStringExt.html)、[OsStrExt](https://doc.rust-lang.org/std/os/windows/ffi/trait.OsStrExt.html)
 
@@ -71,9 +71,9 @@ let matcher = regex::RegexBuilder::new(&source)
 
 **范围验证可用公开结构完成**：`Ast.atoms`、`Atom::Bracket`、`Bracket.items`、`BracketItem::{Atom,Range}` 及 `BracketAtom` 都公开。对 bracket 直接成员及 range 两端只允许 `BracketAtom::Char`，即可拒绝 `CollatingSymbol`、`EquivalenceClass`、`CharClass`，保留当前只承诺的普通集合 / 范围 / 否定集合。此为使用已有 AST 的薄白名单，不是手写第二个 glob parser。[公开 AST](https://github.com/magicant/yash-rs/blob/e333d14230fdbbeecd086f7eeb037053bbc0356e/yash-fnmatch/src/ast.rs)
 
-这项白名单有实际依据：**实测**未受限的 `[[.x|y.]]` 被库生成为 `\A(?:x|y)\z`，匹配 `x`；对应源码把多字符 collating/equivalence 内容直接写进正则。不能不加限制就把完整 POSIX 扩展接进产品，也不要自行修补生成的正则。白名单可以在上述三个扩展节点上准确拒绝，不会因为字面文本恰含 `[:` 就保守误拒。是否采用这个基本语法范围交用户确认。
+这项白名单有实际依据：**实测**未受限的 `[[.x|y.]]` 被库生成为 `\A(?:x|y)\z`，匹配 `x`；对应源码把多字符 collating/equivalence 内容直接写进正则。不能不加限制就把完整 POSIX 扩展接进产品，也不要自行修补生成的正则。白名单可以在上述三个扩展节点上准确拒绝，不会因为字面文本恰含 `[:` 就保守误拒。用户随后接受这一基本语法范围。
 
-**已测**：`?` 分别匹配 `中` / `😀`；`[中]`、`[!中]`、`[À-Ö]` 按标量匹配；`É` / `[É]` 在 caseless 下匹配 `é`，`Σ` 匹配 `ς`，`ß` 不匹配 `ss`；`A\B` 不混同 `A/B`，`A*B` 可跨字段里的真实 `/` 或 `\`；换行、空 glob、整字段锚及 `[*]` 均符合目标。未闭合 `[` 按字面处理，`[z-a]` 由生成 regex 的编译报错；这是库的既有语法，不另写“修复器”。这些边界仍需随依赖选择一同确认为产品语法。
+**已测**：`?` 分别匹配 `中` / `😀`；`[中]`、`[!中]`、`[À-Ö]` 按标量匹配；`É` / `[É]` 在 caseless 下匹配 `é`，`Σ` 匹配 `ς`，`ß` 不匹配 `ss`；`A\B` 不混同 `A/B`，`A*B` 可跨字段里的真实 `/` 或 `\`；换行、空 glob、整字段锚及 `[*]` 均符合目标。未闭合 `[` 按字面处理，`[z-a]` 由生成 regex 的编译报错；这是库的既有语法，不另写“修复器”。用户随后接受这组基本 glob 语法边界。
 
 **KEY 的最小领域适配（推论）**：模式和候选按真正的注册表 `\` 层级分成组件；组件恰为 `**` 才表示零或多层，其余组件使用上面现成引擎。因为普通组件的 matcher 从不收到跨层文本，`* / ? / []` 自然不跨层，而组件中的 `/` 仍是普通字符；零组件分支也自然保留 `Vendor\**` 匹配 `Vendor`。名称 / 数据不分组件，直接使用纯字符串引擎。该组合不要求把用户模式翻译为文件路径、不改变 Unicode 字符语义；本研究未编写最终组件序列匹配器。
 
@@ -190,7 +190,7 @@ let expanded = refs.replace_all(saved_text, |c: &regex::Captures<'_>| {
 
 ### 用户已确认的解释规则与 Microsoft 事实边界
 
-下表用 UTF-16 代码单元表示字符串，`0` 为 NUL；数据读回本身均可成功。**研究期间用户已确认下列解释规则；这是产品选择，不是 Microsoft 强制要求。** 它接受 SZ / EXPAND_SZ 缺末尾 NUL，但对 MULTI_SZ 采用严格双 NUL 布局；这种差别应明确记录，而不是笼统宣称“所有字符串终止异常都不可解释”。
+下表用 UTF-16 代码单元表示字符串，`0` 为 NUL；数据读回本身均可成功。**研究期间用户已确认下列解释规则；这是产品选择，不是 Microsoft 强制要求。** 它接受 SZ / EXPAND_SZ 缺末尾 NUL；MULTI_SZ 的空序列接受单 / 双 NUL，非空序列严格校验完整结束与残留。用户在核对 Microsoft 空序列定义后明确接受单 NUL，不能继续套用“任何 MULTI_SZ 都至少两个 NUL”的绝对规则。
 
 | 类型 / 原始布局 | 可证事实 | 本次用户选择及必须保留的边界 |
 | --- | --- | --- |
@@ -201,10 +201,10 @@ let expanded = refs.replace_all(saved_text, |c: &regex::Captures<'_>| {
 | 字符串类：奇数字节数 | 不能把全部字节分成 UTF-16 单元 | 不应丢末字节 / 补零后冒充原文。原始字节和类型仍可查询；需要完整文本判断时依既定失败策略。 |
 | 字符串 / 名称：孤立代理项 | u16 仍可无损保存，但不是 Unicode 标量序列 | 数据文本严格解码失败，保留原始内容；名称的必要判断失败处理仍按最终名称契约，不能用替换字符伪造。 |
 | MULTI_SZ：`A,0,B,0,0` | 两个元素加结束空字符串 | 按元素匹配 `A`、`B`，不拼接；末尾格式 NUL 不进入元素文本。 |
-| MULTI_SZ：`0`；`0,0` | Microsoft 明写空序列为 `\0`；第二种是常见双终止布局 | 产品严格要求双 NUL：`0,0` 恰好表示空序列；`0` 不可解释。**拒绝单 NUL 空序列是产品额外限制，不能引用 Microsoft 说它必然无效。** |
+| MULTI_SZ：`0`；`0,0` | Microsoft 明写空序列为 `\0`；第二种是常见双终止布局 | 用户确认两者都解释为空序列 `[]`，原始长度仍保持区别；没有可供文本匹配的元素。 |
 | MULTI_SZ：`A,0,B` 或 `A,0,B,0` | 最后元素 / 序列缺结束布局，但元素编码可能完整 | 产品选择不可解释，不补终止符后冒充保存布局。 |
-| MULTI_SZ：`A,0,0,B,0,0`；多余尾 NUL | 标准空字符串已结束序列；后面仍有存储单元 | 产品选择提前终止后残留 / 多余尾 NUL 均不可解释；不能当正常空元素或丢后缀。MULTI_SZ 各元素也要严格 UTF-16。 |
-| 任意类型：零字节 | 实际存在、长度为 0，与缺失不同 | `--data-zero-length` 据原始长度判断；SZ / EXPAND_SZ 解释为空字符串，MULTI_SZ 不满足双 NUL 布局不可解释，整数不满足宽度不可解释。不能假造整数 0。 |
+| MULTI_SZ：`A,0,0,B,0,0`；多余尾 NUL；至少三个纯 NUL | 标准空字符串已结束序列；后面仍有存储单元 | 产品选择提前终止后残留 / 多余尾 NUL 均不可解释，三个或更多纯 NUL 也不是空序列；不能当正常空元素或丢后缀。MULTI_SZ 各元素也要严格 UTF-16。 |
+| 任意类型：零字节 | 实际存在、长度为 0，与缺失不同 | `--data-zero-length` 据原始长度判断；SZ / EXPAND_SZ 解释为空字符串，MULTI_SZ 没有结束单元不可解释，整数不满足宽度不可解释。不能假造整数 0。 |
 | DWORD / DWORD_BE 长度 4，QWORD 长度 8 | 与声明位宽一致 | 已有 `u32::from_le_bytes / from_be_bytes`、`u64::from_le_bytes` 足够；转无符号十进制文本，无需新整数库。 |
 | 整数长度 0 / 1 / 3 / 5 / 7 / 9 等 | 不是对应位宽的完整表示 | 产品选择 DWORD 恰 4、QWORD 恰 8 字节，其他长度不可解释；不得截断、补零或读越界。原始 bytes / type 判断仍可用。 |
 
