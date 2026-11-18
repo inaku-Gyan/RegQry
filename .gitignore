@@ -1,0 +1,11 @@
+# ---- Agent stuff ------------------------------
+/.scratch/
+/docs/agents/
+
+# ---- OS ---------------------------------------
+.DS_Store
+Thumbs.db
+*Zone.Identifier
+
+# ---- Artifacts --------------------------------
+target/
