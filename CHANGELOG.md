@@ -4,6 +4,20 @@ Version entries are reviewed before their release tags. See [GitHub Releases](ht
 
 ## Unreleased
 
+## [0.1.3] - 2026-11-20
+
+Initial read-only registry search candidate, with the features and limitations listed under 0.1.0.
+
+### Fixed
+
+- Normalize the evidence collector's validated stage parameter before dispatch. The workflow's lowercase `source` and `registry` inputs now select their intended stages; all accepted casing produces the same evidence contract.
+- Exercise the real workflow spelling and mixed-case stage inputs in source/registry collection tests, including preservation of the original source acceptance archive.
+
+### Release status
+
+- The v0.1.2 candidate's native assets and both standard-user source suites passed, but evidence collection stopped before Cargo upload or public GitHub publication. Its tag and frozen originals remain unchanged; corrected code uses a new version.
+- Executables are unsigned. Minimum/clean clients and human terminal/physical-keyboard checks remain deferred; see the [compatibility notes](docs/compatibility.md).
+
 ## [0.1.2] - 2026-11-20
 
 Initial read-only registry search candidate: multiple roots and views, field-specific regex/glob/data/type/time filters, grouped UTF-8 previews, cancellation and explicit incomplete-query status. Full query features and limitations are listed under 0.1.0.

@@ -4,6 +4,8 @@ The first [v0.1.0 tag attempt](https://github.com/inaku-Gyan/RegQry/actions/runs
 
 The [v0.1.1 attempt](https://github.com/inaku-Gyan/RegQry/actions/runs/44614892151) subsequently passed that gate and both native builds, then froze its originals on recovery. Input export stopped on incompatible gh formatting flags before source acceptance or publication. The [pagination/readback checks](release-pagination-2026-11-20.md) record the real CLI regression, preserved candidate and 0.1.2 correction; existing tags/assets are not replaced.
 
+The [v0.1.2 attempt](https://github.com/inaku-Gyan/RegQry/actions/runs/44628919528) froze its original candidate and passed both standard-user source suites. Collection then stopped on a case-sensitive stage comparison, before staging evidence or publishing a channel. The [stage normalization checks](release-stage-2026-11-20.md) record the exact regression, full model checks, original-payload diagnostic replay and 0.1.3 preparation.
+
 No frozen-candidate release acceptance or channel publication has passed yet. Actual native hosted development checks, including standard-user registry queries and independent source installations, have passed. This index distinguishes executed development evidence, required candidate checks and deferred client/manual coverage. Older dated records retain the requirements and unexecuted state at that point; current policy is the [hosted acceptance contract](../hosted-acceptance.md).
 
 Local development checks are recorded in [foundation checks, 2026-11-19](foundation-2026-11-19.md).
@@ -43,7 +45,7 @@ The first actual hosted x64/ARM64 execution, its integration failures/fixes and 
 | Deep/wide scaling and representative live-query baselines | Actual fixed owned-fixture scaling passed on both native hosts and both origins; twelve separate development live observations remain incomplete and are not correctness evidence |
 | Portable candidate test bundles and DLL checks | Both native development ZIPs passed import/relocation/inventory checks; frozen candidate execution pending, minimum/clean systems deferred |
 | Production/test distribution materials and user ZIPs | Both native development builders and production/test notices/material/import checks passed; actual candidate distribution remains pending |
-| Candidate source/ZIP hashes and repeatable Cargo archive | v0.1.1 originals frozen after recovery; input export failed before acceptance; corrected 0.1.2 candidate and strict publication checks pending |
+| Candidate source/ZIP hashes and repeatable Cargo archive | v0.1.2 originals frozen; both source suites passed but collection failed; local repeated Cargo archive hash matched. Corrected 0.1.3 candidate collection and channel checks pending |
 | First local crates.io initialization, Trusted Publisher, registry installs and immutable release | Scripts/workflow implemented; existing local identity handles repository setup, no App/PAT fallback; real channel execution pending |
 
 Later versioned records must identify commit/candidate, actual OS build and host/process/target architecture, compiler/SDK, user token/setup privileges, input fixture ownership, exact commands/output/exit/cleanup, and CLI/source/ZIP/test-bundle hashes. An unexecuted or missing case is never pass. Keep raw/structured evidence and test bundles with the final Release, with stable pointers here; Actions artifacts alone are temporary.
