@@ -68,8 +68,10 @@ jobs:
         run: |
           $version = (Import-PowerShellDataFile ./scripts/tools.psd1).CargoAbout
           $toolRoot = Join-Path $env:RUNNER_TEMP 'regqry-license-tools'
-          cargo install --version $version --locked --root $toolRoot cargo-about
+          cargo install --version $version --locked --features cli --root $toolRoot cargo-about
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $installedVersion = & (Join-Path $toolRoot 'bin/cargo-about.exe') --version
+          if ($LASTEXITCODE -ne 0 -or $installedVersion -cne ('cargo-about ' + $version)) { throw 'Pinned cargo-about installation failed' }
           (Join-Path $toolRoot 'bin') | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
       - name: Build and relocate native user and test assets
         run: |
@@ -168,4 +170,4 @@ jobs:
             echo 'Non-Windows compilation unexpectedly succeeded'
             exit 1
           fi
-          rg --fixed-strings 'RegQry supports Windows only.' unsupported.log
+          grep -F -- 'RegQry supports Windows only.' unsupported.log

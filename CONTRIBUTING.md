@@ -30,7 +30,7 @@ The audit creates a fresh Cargo home and advisory database for each run, explici
 
 Commit `Cargo.lock`. Compiler, dependency/features, tool, or action upgrades go through PR review. Check behavior as well as dependency versions. Add a dependency when its implementation is needed; registry and cancellation dependencies now accompany their query implementations.
 
-Asset construction requires cargo-about 0.9.3 from `scripts/tools.psd1` and the pinned toolchain's `rust-docs` component. Install that exact version with `cargo install --version 0.9.3 --locked cargo-about`, or pass an existing official executable using `-CargoAbout`. Its graph filtering and hash-checked clarifications are reviewed configuration, not a substitute for the separate dependency audit. Read [distribution materials](docs/distribution.md) when changing dependency licenses or carried assets.
+Asset construction requires cargo-about 0.9.3 from `scripts/tools.psd1` and the pinned toolchain's `rust-docs` component. Install that exact version with `cargo install --version 0.9.3 --locked --features cli cargo-about`, or pass an existing official executable using `-CargoAbout`. The `cli` feature is required to install its executable. Its graph filtering and hash-checked clarifications are reviewed configuration, not a substitute for the separate dependency audit. Read [distribution materials](docs/distribution.md) when changing dependency licenses or carried assets.
 
 Use Conventional Commit categories such as `feat`, `fix`, `docs`, `chore`, and `ci` for principal changes and PR titles. Use ordinary merge commits, with Git's normal merge message. No squash-only rule or hard gate on every intermediate/historical commit applies. Local hooks are optional.
 

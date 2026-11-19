@@ -121,9 +121,12 @@ jobs:
         run: |
           rustup toolchain install $env:RUSTUP_TOOLCHAIN --profile minimal --component rust-docs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $version = (Import-PowerShellDataFile ./scripts/tools.psd1).CargoAbout
           $toolRoot = Join-Path $env:RUNNER_TEMP 'regqry-license-tools'
-          cargo install --version 0.9.3 --locked --root $toolRoot cargo-about
+          cargo install --version $version --locked --features cli --root $toolRoot cargo-about
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $installedVersion = & (Join-Path $toolRoot 'bin/cargo-about.exe') --version
+          if ($LASTEXITCODE -ne 0 -or $installedVersion -cne ('cargo-about ' + $version)) { throw 'Pinned cargo-about installation failed' }
           (Join-Path $toolRoot 'bin') | Out-File $env:GITHUB_PATH -Encoding utf8 -Append
       - name: Build exact user/test assets with recorded MSVC and SDK
         run: |

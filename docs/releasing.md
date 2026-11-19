@@ -10,7 +10,7 @@ Use a clean checkout, Rust 1.100.0 with the `rust-docs` component, native MSVC C
 
 ```powershell
 rustup component add rust-docs --toolchain 1.100.0
-cargo install --version 0.9.3 --locked cargo-about
+cargo install --version 0.9.3 --locked --features cli cargo-about
 ./scripts/check.ps1 -Check package
 # Adapt the source path if CARGO_TARGET_DIR is set.
 ./scripts/build-release-assets.ps1 `
