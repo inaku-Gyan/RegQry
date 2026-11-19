@@ -2,7 +2,7 @@
 
 核实日期：2026-11-19。研究基线：`main` 的 `34e02fa1a021689a61c059172737a53994180d1e`。本报告只记录发布能力与可实施分支，不选择工具、不创建工作流、不读取凭据、不创建真实 Release 或发布 crate。
 
-项目约束来自已确认的工程方案及本轮主对话：普通 merge；Rust 1.100.0 / edition 2024 单工具链；两个原生 MSVC 目标；Git tag 触发发布准备，普通 main merge 不自动发布；首发 `0.1.0`；GitHub 只分发双架构 ZIP，另提供 crates.io 源码安装；候选必须经过最低 Windows、普通用户、干净系统验收，之后晋升，不重建已验收的二进制。用户已选 Cargo + gh + 少量 PowerShell / Actions 编排，不采用 dist / release-plz；首版签名延期；没有额外安装器或自动更新渠道。工具比较保留为事实与未采用路线的依据。
+项目约束来自已确认的工程方案及本轮主对话：普通 merge；Rust 1.100.0 / edition 2024 单工具链；两个原生 MSVC 目标；Git tag 触发发布准备，普通 main merge 不自动发布；首发 `0.1.0`；GitHub 只分发双架构 ZIP，另提供 crates.io 源码安装；发布必须经过最低 Windows、普通用户、干净系统验收。用户已选 Cargo + gh + 少量 PowerShell / Actions 编排，不采用 dist / release-plz；首版签名延期；没有额外安装器或自动更新渠道。Q13 已接受下文的简洁自动发布骨架与 Q12 资产留档；Q11 的“已验收 ZIP 严格不重建 + Cargo 候选归档 hash 严格相同”仍是待确认提案，不能记成用户已选。工具比较保留为事实与未采用路线的依据。
 
 证据标记：**文档**是当前官方契约；**代码**是所列精确版本的实现；**推断 / 候选方案**是由二者得到的编排设计；**未验证**不能当作本项目已经支持。下述脚本、故障恢复及远程权限均未实际演练。
 
@@ -49,19 +49,19 @@
 
 ## 3. 可实施的候选与晋升边界
 
-以下是**此前约束下的候选编排**，不是已经确认的流水线。用户随后要求参考 inclean 的简洁 tag 流程（第 8 节）；尚不能把这里的 Environment、长期 draft 或独立 dispatch 当作新增已选要求。最低系统等验收承诺仍有效，具体衔接由主对话继续确定。
+**Q13 已选骨架：**参考 inclean，`tag → check → reusable CI → native build → 验收 → 自动发布`，没有单独人工批准步骤；缺证据就停在 draft，补齐后 rerun；Cargo 发布及 registry 安装验证成功后，最后公开 GitHub Release。Q12 资产留档也已接受。以下展开这一骨架的实施边界；Q11 的严格不重建 / 同 hash 尚待确认，细节仍须实现和演练。
 
 1. **固定身份。**已审阅的 main 提交上创建最终 `v0.1.0` tag；工作流核对 tag、commit SHA、Cargo 版本和命令版本一致。tag filter 只是筛选，另用 Cargo / metadata 检查合法版本与支持策略。候选是最终版本的 draft，不必先公开 `0.1.0-rc.1`。
 2. **生成一次候选输入。**清洁 checkout；固定 Rust/Cargo、lock、features、配置和源码包清单，执行 Windows `cargo package --locked`。保存最终 `.crate` 及 SHA-256；从该归档解包，用相同输入原生构建两个目标及测试包，或者逐文件证明二进制构建 checkout 与归档中实际构建输入一致。不能把 GitHub 自动 Source code ZIP、dist source tarball 和 Cargo `.crate` 当作同一对象。
 3. **完成最终字节。**若要签名，此时签名后再 ZIP、hash、验收。创建唯一 draft Release，附双 ZIP、checksum、候选 `.crate`、manifest 与必要验收材料；从上传位置重新下载核对。draft 尚可修改，manifest 必须记 asset ID / name / size / SHA、tag SHA、工具链 / lock / features / 构建配置。任何替换都生成新候选身份并重做受影响验收。
-4. **验收门禁。**最低 x64 Windows 10 22H2、ARM64 Windows 11 24H2、普通用户、干净系统和源码安装等已定证据绑定这组 hashes。晋升 job 解析证据文件，验证 case 完成、环境、candidate ID 与 hash 一致；缺项失败。GitHub Environment 人工批准只授权开始该 job，不能证明测试已执行。
-5. **只晋升。**恢复精确 candidate；核对远程 draft / tag / 所有资产无变化，执行被选的 Cargo 发布路径并核验 registry 包，然后公开同一 draft；或采用用户另选的渠道次序。此时不重建、重签名或重压缩已验收 ZIP。`gh release edit TAG --draft=false` 是公开已有 draft 的操作。[gh edit][gh-edit]
+4. **验收门禁。**最低 x64 Windows 10 22H2、ARM64 Windows 11 24H2、普通用户、干净系统和源码安装等已定证据绑定这组 hashes。发布 job 解析证据文件，验证 case 完成、环境、candidate ID 与 hash 一致；缺项失败并保留 draft，补齐证据后 rerun。这是证据检查，不增加人工批准按钮。
+5. **完成发布。**核对远程 draft / tag / 资产与验收证据对应，执行 Cargo 发布、核验 registry 包并完成安装验证，然后公开同一 draft。若 Q11 的冻结策略获确认，恢复只使用已有已验收 ZIP，不重建、重签名或重压缩。`gh release edit TAG --draft=false` 是公开已有 draft 的操作。[gh edit][gh-edit]
 
 Cargo 归档内容和验证规则见 [cargo package][cargo-package]；GitHub 支持先 draft / assets 再公开，而且 `gh release create` 的资产上传本身也不是原子事务。[gh create][gh-create]。以上第 1–5 步的证据格式、比较规则与串行恢复是项目的编排责任。
 
 **为什么使用最终版本 draft：**crates.io 的 `0.1.0-rc.1` 与 `0.1.0` 是不同版本；去掉后缀需要改变 manifest / lock 及可能嵌入的版本，不能原样晋升同一归档或二进制。`cargo install` 默认避开 prerelease，需要显式请求；GitHub 的 draft / prerelease / latest 是另一套状态，不能控制 Cargo 版本选择。[Cargo 预发布规则][cargo-prerelease]、[gh create][gh-create]
 
-**长期等待的两条实现分支：**
+**未采用的额外人工门禁与等待选项：**以下是能力边界，不是 Q13 所选流程的附加要求。
 
 - 同一次 tag workflow 在上传候选后等待 Environment，批准后校验证据再发布；GitHub 当前 approval 上限 **30 天**，整个 run（含等待）上限 **35 天**。超过时限不会保留一个可无限恢复的挂起 run。[Actions limits][gh-limits]
 - tag workflow 完成候选 draft 后结束；后续专门的 dispatch / recovery workflow 以 tag、candidate manifest 和证据指针恢复。它必须只晋升，不触发新构建；workflow 文件须在 default branch，dispatch 的实际 ref 还须满足 environment 规则。新增该恢复入口不等于把初始触发改成 dispatch。[事件规则][gh-events]
@@ -94,7 +94,7 @@ Draft 是可继续编辑的 Release 对象；它不使用 Actions artifact 作�
 
 **crates.io：**新包先发布，owner 才能在 Settings 添加 GitHub repository owner/name、workflow filename 和可选 environment。当前文档仍明确 initial publish requires an API token；token scopes 应覆盖新包发布而非只更新已有包。后续认证 job 用 `id-token: write` 交换短期 token，官方 auth action 在 job 结束时撤销；不要在构建候选时就申请一个等待数天的 30 分钟 token。release-plz 已内建同一交换，不与 auth action /长期 token 混用。[Trusted publishing][crates-trust]、[auth action][crates-auth-action]、[release-plz 认证与 scopes][plz-auth]
 
-Trusted publisher 配置列出的字段没有 branch/tag 筛选；**推断：**这不能代替 GitHub Environment 的选定 branch/tag 规则、tag 权限和 workflow 中的候选身份核对。tag-trigger job 的 ref 是 tag，不是 main；不能给 environment 只允许 main 却期望 tag job 通过。恢复 workflow 若用 main ref 但输入 candidate tag，应明确批准的是哪个 ref、发布的是哪个 SHA。Environment approval 通过后才给该 job environment secrets；在此之后即时取发布凭据。[Environment 规则][gh-environments]
+Trusted publisher 配置列出的字段没有 branch/tag 筛选；**推断：**这不能代替 GitHub Environment 的选定 branch/tag 规则、tag 权限和 workflow 中的候选身份核对。tag-trigger job 的 ref 是 tag，不是 main；不能给 environment 只允许 main 却期望 tag job 通过。恢复 workflow 若用 main ref 但输入 candidate tag，应明确授权的是哪个 ref、发布的是哪个 SHA。Environment 可以只承担 auth scope、ref 限制和 secret 隔离；配置 required reviewers 才引入人工审批，Q13 未采用该步骤。取凭据应在证据检查通过之后即时进行。[Environment 规则][gh-environments]
 
 **GitHub：**Release 操作通常用该仓库 `contents: write` 的 `GITHUB_TOKEN`；只让一个工具 / job 创建和公开同一版本的 Release，其他工具仅准备、上传或验证。`gh release create --draft --verify-tag` 防止无意从 default branch 自动造 tag；另行解析实际 tag SHA，不能仅信任 `target_commitish`（既有 tag 时它不决定 tag）。如果目标提交相对 default branch 修改 workflow，当前 API 还可能要求额外 Workflows write，而 `GITHUB_TOKEN` 不能获该权限；本项目应在已审阅 main 提交打 tag并演练权限，不据此默认要求 PAT。[gh create][gh-create]、[Release API][gh-releases]
 
@@ -102,7 +102,7 @@ Trusted publisher 配置列出的字段没有 branch/tag 筛选；**推断：**�
 
 ## 6. 远程状态核对和部分失败恢复
 
-下表是**项目应实现的恢复规则**，不是 Cargo / gh 自动提供的事务。按版本串行，恢复先校验 tag SHA、candidate ID、预期资产集合及证据，再判断具体状态。不要重跑整个构建流程来“修复”已有版本。
+下表是**项目应实现的恢复规则**，不是 Cargo / gh 自动提供的事务。按版本串行，恢复先校验 tag SHA、candidate ID、预期资产集合及证据，再判断具体状态。已公开版本不能通过重新构建同版本来覆盖；若 Q11 冻结策略获确认，恢复也不得重建已验收 ZIP。
 
 | 实际状态 | 继续动作 / 停止条件 |
 | --- | --- |
@@ -153,7 +153,7 @@ cargo-dist 当前内置 Windows signing 文档仍只承诺 x86_64，不能因为
 
 **文档与实现区别：**CONTRIBUTING 确实要求人工 bump Cargo、创建并 push 同版本 tag，称三渠道一次完成；实际 YAML 是有依赖的多次远程操作，PyPI 还独立，失败可部分公开。README 泛称下载 tarball，但 Windows 实际 ZIP，与 binstall metadata 的 Windows override 一致。CONTRIBUTING 的失败后删 tag、修复再 tag 建议不覆盖 crates.io 版本永久性，也不能照搬到 immutable Release。[贡献指南][inclean-contributing]、[README][inclean-readme]、[Cargo metadata][inclean-cargo]
 
-**可借鉴部分（推断）：**人工版本、tag 驱动、发布前复用 CI、小矩阵、现有 ZIP 命令、GitHub 后接 Cargo 的简单 job 链，与用户已选工具方向一致；无需引入 maturin/PyPI 或发布自动化框架。**本项目差别：**保留 Rust 1.100.0 pin、双原生 Windows、Windows 上验证源码包、最低系统/普通用户/干净系统证据、最终产物 hash / 许可材料、明确的部分失败恢复；不能照抄 Ubuntu `--no-verify` 后声称包已验收。参考仓库 YAML 不声明 immutable 设置，也没有单独等待候选验收的步骤；本次未审计 action 内部 API 次序，不能由未写 `draft` 推断它必然先公开再上传。具体怎样将既有验收衔接到这条简洁 tag 链，仍是方案确认项。
+**可借鉴部分（推断）：**人工版本、tag 驱动、发布前复用 CI、小矩阵、现有 ZIP 命令和简单 job 链，与用户已选工具方向一致；无需引入 maturin/PyPI 或发布自动化框架。**本项目差别：**保留 Rust 1.100.0 pin、双原生 Windows、Windows 上验证源码包、最低系统/普通用户/干净系统证据、最终产物 hash / 许可材料、明确的部分失败恢复，并按 Q13 将 Cargo 及 registry 安装验证放在 GitHub 公开之前。不能照抄 Ubuntu `--no-verify` 后声称包已验收。参考仓库 YAML 不声明 immutable 设置，也没有单独等待候选验收的步骤；本次未审计 action 内部 API 次序，不能由未写 `draft` 推断它必然先公开再上传。
 
 ## 9. 实施前仍需证明的事项
 
@@ -162,7 +162,7 @@ cargo-dist 当前内置 Windows signing 文档仍只承诺 x86_64，不能因为
 3. 若用 dist：审查生成 plan 和 workflow 的默认 ARM64、上传与公开阶段；若用 release-plz release：证明没有切走已选 tag SHA。以上只做了文档 / 源码审查，没有真实工具执行。
 4. 首发 token 账号与 scopes、crate 名称 / ownership、后续 trusted publisher 的 workflow/environment 身份、Environment reviewer/ref 限制、Release 写权限和 immutable 设置。没有查询账户私有状态或建立这些设置。
 5. 同输入归档重复性、重打包与候选逐文件等价、发布后真实包 checksum / hash，以及首发和 OIDC 两种路径。若选择更强 hash 门槛，必须验证不一致确实阻断 GitHub 公开，并正确记录已发生的 Cargo 部分发布。
-6. 注入 Cargo 上传后超时、GitHub 部分上传、已成功但 job 失败、审批过期和再次 dispatch 等场景；恢复不得重建已验收产物或吞掉不一致。
+6. 注入 Cargo 上传后超时、GitHub 部分上传、已成功但 job 失败、缺证据后 rerun 等场景；恢复不得吞掉不一致。若采用 Q11 冻结策略，还须证明重试不重建已验收产物；审批过期 / 再次 dispatch 只在将来选择相应额外入口时演练。
 
 ## 官方来源
 
