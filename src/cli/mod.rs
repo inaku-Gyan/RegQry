@@ -3,8 +3,14 @@ mod validate;
 use clap::builder::{OsStringValueParser, TypedValueParser, ValueParser};
 use clap::{Arg, ArgAction, Command};
 use jiff::Timestamp;
-use std::io::Write;
 use std::process::ExitCode;
+use std::{
+    io::Write,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+};
 
 const REFERENCE: &str = "MATCHING
   Repeated conditions within root, key, name, or data groups are ORed.
@@ -44,7 +50,7 @@ TARGETS AND TIME
   ages such as 7d or 1h30m (ns/us/ms/s/m/h/d/w; 1d = 24h). Ambiguous or
   nonexistent local midnight is rejected. Relative ages share one start time.
 
-EXAMPLES (PowerShell; query execution is not available in this build)
+EXAMPLES (PowerShell)
   regqry --key-root 'HKCU\\Software' --key-glob '**\\Acme'
   regqry --name '^Path$' --data-i 'vendor' --view 64
   regqry --type sz --type dword --not-type dword
@@ -67,9 +73,6 @@ pub(crate) fn command() -> Command {
     let mut cmd = Command::new("regqry")
         .version(env!("CARGO_PKG_VERSION"))
         .about("Search the Windows Registry")
-        .before_help(
-            "Development build: help and validation only; query execution is not yet available.",
-        )
         .override_usage("regqry [QUERY OPTIONS]")
         .term_width(80)
         .max_term_width(80)
@@ -235,19 +238,45 @@ pub(crate) fn run() -> ExitCode {
             Err(error) => {
                 let _ = writeln!(
                     std::io::stderr().lock(),
-                    "regqry: cannot write help: {error}"
+                    "regqry: cannot write help: {}",
+                    crate::registry::error_text(&error)
                 );
                 ExitCode::from(2)
             }
         };
     }
     match cmd.try_get_matches_from(args) {
-        Ok(_) => {
-            let _ = writeln!(
-                std::io::stderr().lock(),
-                "regqry: query execution is not implemented in this development build"
-            );
-            ExitCode::from(2)
+        Ok(matches) => {
+            let environment = crate::value::Environment::capture();
+            let plan = match query_plan(&matches) {
+                Ok(plan) => plan,
+                Err(error) => {
+                    let _ = writeln!(std::io::stderr().lock(), "regqry: {error}");
+                    return ExitCode::from(2);
+                }
+            };
+            let cancelled = Arc::new(AtomicBool::new(false));
+            let signal = Arc::clone(&cancelled);
+            if let Err(error) = ctrlc::set_handler(move || signal.store(true, Ordering::Relaxed)) {
+                let reason = match &error {
+                    ctrlc::Error::System(error) => crate::registry::error_text(error),
+                    _ => error.to_string(),
+                };
+                let _ = writeln!(
+                    std::io::stderr().lock(),
+                    "regqry: cannot install Ctrl+C handler: {reason}"
+                );
+                return ExitCode::from(2);
+            }
+            let source = crate::registry::WindowsSource {
+                cancelled: &cancelled,
+            };
+            let stdout = std::io::stdout();
+            let stderr = std::io::stderr();
+            let mut output = crate::output::Output::new(stdout.lock(), stderr.lock());
+            ExitCode::from(
+                crate::query::execute(&plan, &environment, &source, &mut output, &cancelled).code(),
+            )
         }
         Err(error) => {
             let code = if error.use_stderr() { 2 } else { 0 };
@@ -259,9 +288,146 @@ pub(crate) fn run() -> ExitCode {
     }
 }
 
+pub(crate) fn query_plan(matches: &clap::ArgMatches) -> Result<crate::query::Plan, String> {
+    use crate::{
+        query::{DataPattern, KeyPattern, Plan},
+        registry::{Root, View},
+    };
+    fn many<T: Clone + Send + Sync + 'static>(matches: &clap::ArgMatches, name: &str) -> Vec<T> {
+        matches
+            .get_many::<T>(name)
+            .map(|values| values.cloned().collect())
+            .unwrap_or_default()
+    }
+    let roots = many::<std::ffi::OsString>(matches, "key-root");
+    let roots = if roots.is_empty() {
+        vec!["HKCU".into(), "HKLM".into()]
+    } else {
+        roots
+    };
+    let mut views: Vec<_> = many::<String>(matches, "view")
+        .iter()
+        .map(|s| if s == "32" { View::V32 } else { View::V64 })
+        .collect();
+    let available = crate::registry::available_views().map_err(|error| {
+        format!(
+            "cannot determine registry views: {}",
+            crate::registry::error_text(&error)
+        )
+    })?;
+    if views.is_empty() {
+        views = available.clone();
+    }
+    if views.iter().any(|view| !available.contains(view)) {
+        return Err("requested registry view is unavailable on this platform".into());
+    }
+    views.sort_unstable();
+    views.dedup();
+    let mut keys: Vec<_> = many::<regex::Regex>(matches, "key")
+        .into_iter()
+        .map(KeyPattern::Regex)
+        .collect();
+    for pattern in many::<String>(matches, "key-glob") {
+        keys.push(KeyPattern::Glob(
+            pattern
+                .split('\\')
+                .map(|component| {
+                    if component == "**" {
+                        Ok(None)
+                    } else {
+                        validate::compile_glob(component, true).map(Some)
+                    }
+                })
+                .collect::<Result<_, _>>()?,
+        ));
+    }
+    let mut names = many::<regex::Regex>(matches, "name");
+    for pattern in many::<String>(matches, "name-glob") {
+        names.push(validate::compile_glob(&pattern, true)?);
+    }
+    let mut data = Vec::new();
+    for option in ["data", "data-i"] {
+        data.extend(
+            many::<regex::Regex>(matches, option)
+                .into_iter()
+                .map(DataPattern::Text),
+        );
+    }
+    data.extend(
+        many::<regex::Regex>(matches, "data-expand")
+            .into_iter()
+            .map(DataPattern::Expanded),
+    );
+    for (option, insensitive) in [("data-glob", false), ("data-iglob", true)] {
+        for pattern in many::<String>(matches, option) {
+            data.push(DataPattern::Text(validate::compile_glob(
+                &pattern,
+                insensitive,
+            )?));
+        }
+    }
+    data.extend(
+        many::<Vec<u8>>(matches, "data-hex")
+            .into_iter()
+            .map(DataPattern::Hex),
+    );
+    if matches.get_flag("data-empty") {
+        data.push(DataPattern::Empty);
+    }
+    if matches.get_flag("data-zero-length") {
+        data.push(DataPattern::Zero);
+    }
+    Ok(Plan {
+        roots: roots.iter().map(|root| Root::validated(root)).collect(),
+        views,
+        keys,
+        names,
+        data,
+        types: many(matches, "type"),
+        not_types: many(matches, "not-type"),
+        not_set: matches.get_flag("data-not-set"),
+        after: many(matches, "key-modified-after"),
+        before: many(matches, "key-modified-before"),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn explicit_roots_replace_defaults_and_views_use_native_availability() {
+        let defaults = query_plan(
+            &command()
+                .try_get_matches_from(["regqry", "--key=Acme"])
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            defaults
+                .roots
+                .iter()
+                .map(|root| root.hive)
+                .collect::<Vec<_>>(),
+            ["HKCU", "HKLM"]
+        );
+        assert_eq!(defaults.views, crate::registry::available_views().unwrap());
+        let explicit = query_plan(
+            &command()
+                .try_get_matches_from([
+                    "regqry",
+                    "--key-root=HKEY_CURRENT_USER\\Software\\",
+                    "--view=32",
+                    "--view=32",
+                ])
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(explicit.roots.len(), 1);
+        assert_eq!(explicit.roots[0].hive, "HKCU");
+        assert_eq!(explicit.roots[0].path, std::ffi::OsStr::new("Software"));
+        assert_eq!(explicit.views, [crate::registry::View::V32]);
+    }
 
     #[test]
     fn repeated_conditions_and_aliases_accumulate() {

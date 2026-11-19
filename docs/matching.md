@@ -1,6 +1,6 @@
 # Matching reference
 
-This is the agreed query contract. The foundation build validates arguments; execution is pending.
+This reference describes the implemented readonly query contract. Formal platform and edge-case acceptance remains pending in the validation index.
 
 | Group | Options |
 | --- | --- |

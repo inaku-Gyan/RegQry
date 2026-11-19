@@ -10,6 +10,8 @@ Planned ZIP packages explicitly use static MSVC CRT, undergo final DLL checks, a
 
 Supported shell targets are cmd, Windows PowerShell 5.1, and PowerShell 7, in the classic console and optional Windows Terminal. The program uses fixed UTF-8 and does not change the host's profile, code page, or persistent settings.
 
+System-error diagnostics request US English explicitly and retain the Win32 numeric code. If that English message is unavailable, a fixed English fallback accompanies the code rather than switching to the host's language.
+
 For PowerShell object capture, explicitly configure the current process and restore its settings:
 
 ```powershell

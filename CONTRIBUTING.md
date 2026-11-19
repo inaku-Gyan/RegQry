@@ -22,7 +22,7 @@ cargo install --version $version --locked cargo-deny
 
 The audit creates a fresh Cargo home and advisory database for each run, explicitly fetches both database and index, then checks advisories, duplicate versions, licenses, and sources for both Windows targets, including test dependencies. Fetch failure blocks the check. Reports are written under `artifacts/`; a pass is current to that run, not an assurance about future advisories. See `deny.toml` for policy. Exceptions must be scoped and document a reason and review deadline; advisory exceptions use the tool's native expiry support.
 
-Commit `Cargo.lock`. Compiler, dependency/features, tool, or action upgrades go through PR review. Check behavior as well as dependency versions. Add a dependency when its implementation is needed; the selected registry/cancellation crates will enter the manifest with those modules.
+Commit `Cargo.lock`. Compiler, dependency/features, tool, or action upgrades go through PR review. Check behavior as well as dependency versions. Add a dependency when its implementation is needed; registry and cancellation dependencies now accompany their query implementations.
 
 Use Conventional Commit categories such as `feat`, `fix`, `docs`, `chore`, and `ci` for principal changes and PR titles. Use ordinary merge commits, with Git's normal merge message. No squash-only rule or hard gate on every intermediate/historical commit applies. Local hooks are optional.
 

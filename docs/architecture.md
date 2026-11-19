@@ -1,6 +1,6 @@
 # Architecture
 
-RegQry uses one Cargo package with a thin binary and an internal library. The library is for project assembly and tests, with no stable public Rust API promise. Only the CLI module exists in the foundation stage; remaining modules are added with their actual implementation.
+RegQry uses one Cargo package with a thin binary and an internal library. The library is for project assembly and tests, with no stable public Rust API promise. All five modules participate in the readonly query path.
 
 | Module | Responsibility |
 | --- | --- |
@@ -10,7 +10,7 @@ RegQry uses one Cargo package with a thin binary and an internal library. The li
 | `query` | Traverse a readonly source, evaluate groups, deduplicate identities, and track completeness |
 | `output` | Consume results synchronously and write grouped UTF-8 previews and diagnostics |
 
-The query module's internal readonly interface will have a real Windows adapter and constructed test data. It is not a general CRUD/plugin interface. Use winreg 0.56.0 for handle ownership and suitable opening operations; windows-sys 0.61.2 fills raw value and timed-key-enumeration gaps. Add these direct dependencies when the registry implementation lands. Use ctrlc 3.5.3 with cancellation. Existing clap, regex, yash-fnmatch, jiff, and hex handle general parsing.
+The query module's internal readonly Source interface has a real Windows adapter and constructed test data. It is not a general CRUD/plugin interface. winreg 0.56.0 owns handles and opens keys; windows-sys 0.61.2 fills raw value and timed-key-enumeration gaps. The same bindings provide ordinal comparisons, native-machine detection and explicit English system messages. ctrlc 3.5.3 sets an atomic cancellation flag. clap, regex, yash-fnmatch, jiff, and hex handle general parsing; memchr 2.8.3 handles raw byte subsequence search.
 
 Time parsing uses jiff 1.0.1 instead of the originally planned chrono/humantime, following [RUSTSEC-2026-0543](https://rustsec.org/advisories/RUSTSEC-2026-0543.html) and [RUSTSEC-2026-0542](https://rustsec.org/advisories/RUSTSEC-2026-0542.html). These are maintenance notices, not vulnerability reports. The maintainer approved the replacement on 2026-11-19. Enable only std, system time zones, and platform timezone data. Duration terms are delegated to Jiff with fixed 24-hour days; system-timezone discovery and ambiguous/nonexistent midnight fail explicitly.
 
@@ -22,4 +22,6 @@ Explicit roots follow normal Windows path resolution. Recursion opens one child 
 
 SZ/EXPAND_SZ decoding uses saved length and removes at most one final NUL; malformed UTF-16 remains raw. MULTI_SZ accepts one or two NULs for an empty sequence and requires complete termination for nonempty sequences. Integer types require exact sizes and correct byte order. Necessary interpretation failures remain distinguishable from empty data and ordinary nonmatches.
 
-Queries capture one start time and process environment, then validate all options before registry access. A read gets at most eight retries after its first attempt; capacity/allocation failure or exhausted retries makes the search incomplete. Cancellation and output errors must preserve the agreed final status. No registry access is implemented in the foundation stage.
+Queries capture one start time and process environment, then validate all options before registry access. IsWow64Process2 determines the native machine for view availability, independently of process bitness. A read gets at most eight retries after its first attempt; capacity/allocation failure or exhausted retries makes the search incomplete. Cancellation and output errors preserve the agreed final status.
+
+Deduplication uses fallible Windows ordinal comparisons and a sorted vector of emitted identities. Normal path components compare without case; malformed components merge only on identical raw units, with uncertain comparisons reported as incomplete. The vector makes lookup logarithmic but insertion can move prior identities; performance and memory baselines remain release acceptance work. No traversal/result sorting promise follows from this internal representation.

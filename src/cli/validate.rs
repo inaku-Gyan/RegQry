@@ -50,7 +50,7 @@ fn compile_regex(value: &str, ignore_case: bool) -> Result<Regex, String> {
         .map_err(|e| e.to_string())
 }
 
-fn compile_glob(value: &str, ignore_case: bool) -> Result<Regex, String> {
+pub(crate) fn compile_glob(value: &str, ignore_case: bool) -> Result<Regex, String> {
     let ast = Ast::new(yash_fnmatch::without_escape(value));
     for atom in &ast.atoms {
         if let Atom::Bracket(bracket) = atom {

@@ -5,6 +5,14 @@ compile_error!("RegQry supports Windows only. Use a native Windows MSVC toolchai
 
 #[cfg(windows)]
 mod cli;
+#[cfg(windows)]
+mod output;
+#[cfg(windows)]
+mod query;
+#[cfg(windows)]
+mod registry;
+#[cfg(windows)]
+mod value;
 
 /// Run the command-line application.
 #[cfg(windows)]

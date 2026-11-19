@@ -1,10 +1,10 @@
 # Testing
 
-The foundation tests cover help/version, the actual CLI argument contract, pattern/type/root/time validation, repeated aliases, and explicit development status. They do not query or modify the registry. Run `cargo test --locked` or the contribution check script.
+Tests cover the actual CLI argument contract, pattern/type/root/time validation, query grouping and completeness, raw value interpretation, environment expansion, and fixed output. CLI subprocess tests exercise help/version and invalid input without registry access. Run `cargo test --locked` or the contribution check script.
 
 Integration tests find the CLI relative to their runtime executable, or use the explicit `REGQRY_TEST_BIN` path. They do not embed the build machine's absolute directory. This supports later portable test bundles; the test bundle generator is not implemented yet.
 
-As query modules land, add deterministic in-memory rules/error tests and native reader tests in temporary application hives. Ordinary tests need no administrator and do not create globally navigable registry fixtures. Application hives do not prove CLI ROOT, WOW64 views, or per-child ACL behavior.
+Query tests use deterministic in-memory sources and a native temporary application hive. RegLoadAppKey creates a new hive inside a unique temporary directory; setup writes only through that private handle. The native case covers a 6,000-character value name, a 256 KiB value, an unknown type code, exact saved bytes and the query/output path; closing all handles and explicit temporary-directory cleanup are checked. Ordinary tests do not create globally navigable registry fixtures or request elevation. Application hives do not prove CLI ROOT, WOW64 view separation, or per-child ACL behavior.
 
 Real root/view/ACL/link cases run only in explicitly started, disposable VM suites. Create a private namespace with a fresh identity, check creation disposition and ownership, and limit cleanup to that fixture. Links use VM rollback/destruction as the final cleanup boundary. Test setup privileges and the actual ordinary-user query token are separate. Never use the user's existing registry as a fixed expected-result dataset.
 

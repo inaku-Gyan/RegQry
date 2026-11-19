@@ -108,8 +108,8 @@ fn invalid_inputs_fail_before_query_execution() {
 }
 
 #[test]
-fn valid_queries_report_development_status_without_fabricating_results() {
-    for args in [
+fn otherwise_valid_patterns_are_validated_before_registry_access() {
+    for mut args in [
         vec!["--view=64"],
         vec!["--name="],
         vec!["--name-glob="],
@@ -117,12 +117,16 @@ fn valid_queries_report_development_status_without_fabricating_results() {
         vec!["--data=-legacy"],
         vec!["--data-not-set", "--data-not-set"],
     ] {
-        command()
+        args.push("--key-root=HKCU:");
+        let result = command()
             .args(args)
             .assert()
             .code(2)
             .stdout("")
-            .stderr("regqry: query execution is not implemented in this development build\n");
+            .get_output()
+            .clone();
+        let error = String::from_utf8(result.stderr).unwrap();
+        assert!(error.contains("ROOT must start"), "{error}");
     }
 }
 
