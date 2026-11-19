@@ -74,7 +74,7 @@ function Resolve-ReleaseStagedEvidence {
         # than collecting/recompressing a second purported original on retry.
         if ($env:GITHUB_ACTIONS -cne 'true' -or $env:GITHUB_RUN_ID -notmatch '^[0-9]+$') { return $null }
         $artifactName = $Stage + '-acceptance-original'
-        $artifacts = (Invoke-ReleaseGh @('api','--paginate','--slurp',("repos/$Repository/actions/runs/$($env:GITHUB_RUN_ID)/artifacts?per_page=100"),'--jq','[.[].artifacts[]]')) -join [char]10 | ConvertFrom-Json
+        $artifacts = @(Get-ReleaseApiItems "repos/$Repository/actions/runs/$($env:GITHUB_RUN_ID)/artifacts?per_page=100" 'artifacts')
         $originalArtifacts = @($artifacts | Where-Object name -ceq $artifactName)
         if ($originalArtifacts.Count -eq 0) { return $null }
         if ($originalArtifacts.Count -ne 1 -or $originalArtifacts[0].expired -ne $false) { throw 'Original acceptance artifact is ambiguous or expired; never create a replacement original' }

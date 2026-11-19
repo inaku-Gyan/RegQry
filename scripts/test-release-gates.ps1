@@ -6,7 +6,7 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'release/acceptance.ps1')
 $reportRoot = New-ReleaseDirectory $ReportDirectory
 $fixtureRoot = New-ReleaseDirectory (Join-Path ([IO.Path]::GetTempPath()) ('rq-rel-' + [guid]::NewGuid().ToString('N')))
-$result = [ordered]@{ schemaVersion = 1; status = 'fail'; scope = 'synthetic release-state/evidence model with mocked remote commands; no real publication, credentials, registry fixture, native ARM execution or formal acceptance'; fixtureRoot = $fixtureRoot; cases = @(); error = $null }
+$result = [ordered]@{ schemaVersion = 1; status = 'fail'; scope = 'synthetic release-state/evidence model with mocked remote commands and clock; no real publication, credentials, registry fixture, native ARM execution or formal acceptance'; fixtureRoot = $fixtureRoot; cases = @(); error = $null }
 $saved = @{}
 foreach ($name in @('GITHUB_ACTIONS', 'GITHUB_REF', 'GITHUB_REPOSITORY', 'GITHUB_EVENT_NAME', 'GITHUB_OUTPUT', 'GITHUB_STEP_SUMMARY', 'GITHUB_RUN_ID', 'GITHUB_RUN_ATTEMPT', 'GITHUB_SHA')) { $saved[$name] = [Environment]::GetEnvironmentVariable($name, 'Process'); Remove-Item -LiteralPath ('Env:\' + $name) -ErrorAction SilentlyContinue }
 $originalLocation = (Get-Location).Path
@@ -18,6 +18,7 @@ $global:RegQryReleaseModel.remoteFailure = $false; $global:RegQryReleaseModel.do
 $global:RegQryReleaseModel.checkoutFailure = ''; $global:RegQryReleaseModel.packageVersion = '0.1.0'
 $global:RegQryReleaseModel.httpRequests = 0; $global:RegQryReleaseModel.settingsReads = 0
 $global:RegQryReleaseModel.notesRequests = 0
+$global:RegQryReleaseModel.invisibleDraftReads = 0; $global:RegQryReleaseModel.readbackSleeps = 0
 $global:RegQryReleaseModel.originalArtifacts = @{}
 
 function Invoke-WebRequest {
@@ -35,6 +36,10 @@ function Assert-Rejected {
     $caught = $false
     try { & $Body | Out-Null } catch { if ($_.Exception.Message -notmatch $Reason) { throw }; $caught = $true }
     if (-not $caught) { throw ('Expected rejection: ' + $Reason) }
+}
+function Start-Sleep {
+    param([int]$Milliseconds, [int]$Seconds)
+    $global:RegQryReleaseModel.readbackSleeps++
 }
 function git {
     $global:LASTEXITCODE = 0
@@ -56,9 +61,12 @@ function Get-Content {
 }
 function gh {
     $arguments = @($args); $global:LASTEXITCODE = 0
+    # Match the real gh argument parser instead of accepting impossible calls.
+    if ($arguments -contains '--slurp' -and ($arguments -contains '--jq' -or $arguments -contains '--template')) { $global:LASTEXITCODE = 1; return }
     if ($global:RegQryReleaseModel.remoteFailure) { $global:LASTEXITCODE = 1; return }
     if ($arguments[0] -ceq 'api') {
         $endpoint = @($arguments | Where-Object { $_ -like 'repos/*' })[0]
+        if ($endpoint -ceq 'repos/inaku-Gyan/RegQry/model-pages') { $global:RegQryReleaseModel.apiPages; return }
         if ($endpoint -ceq 'repos/inaku-Gyan/RegQry') { '{"id":1462950131,"full_name":"inaku-Gyan/RegQry","default_branch":"main","permissions":{"admin":true,"push":' + $(if ($global:RegQryReleaseModel.noPushVisibility -or $global:RegQryReleaseModel.installationToken) { 'false' } else { 'true' }) + '}}'; return }
         if ($endpoint -ceq 'repos/inaku-Gyan/RegQry/releases/generate-notes') {
             if ($arguments -cnotcontains 'POST' -or $arguments -cnotcontains 'tag_name=v0.1.0') { throw 'Capability check did not use the exact tagged generate-notes request' }
@@ -69,13 +77,16 @@ function gh {
             return
         }
         if ($endpoint -match '/commits/') { $global:RegQryReleaseModel.fakeCommit; return }
-        if ($endpoint -match '/releases\?') { if ($global:RegQryReleaseModel.remote) { '[[' + ($global:RegQryReleaseModel.remote | ConvertTo-Json -Depth 40 -Compress) + ']]' } else { '[[]]' }; return }
+        if ($endpoint -match '/releases\?') {
+            if ($global:RegQryReleaseModel.invisibleDraftReads -gt 0) { $global:RegQryReleaseModel.invisibleDraftReads--; '[[]]'; return }
+            if ($global:RegQryReleaseModel.remote) { '[[' + ($global:RegQryReleaseModel.remote | ConvertTo-Json -Depth 40 -Compress) + ']]' } else { '[[]]' }; return
+        }
         if ($endpoint -match '/assets\?') { '[' + (ConvertTo-Json -InputObject @($global:RegQryReleaseModel.remote.assets) -Depth 40 -Compress) + ']'; return }
         if ($endpoint -match '/actions/runs/[0-9]+/artifacts\?') {
-            ConvertTo-Json -InputObject @($global:RegQryReleaseModel.originalArtifacts.Keys | ForEach-Object { @{name=$_;expired=$false} }) -Compress
+            '[' + (ConvertTo-Json -InputObject @{artifacts=@($global:RegQryReleaseModel.originalArtifacts.Keys | ForEach-Object { @{name=$_;expired=$false} })} -Compress) + ']'
             return
         }
-        if ($endpoint -match '/actions/runs/6000/attempts/1/jobs\?') { ConvertTo-Json -InputObject @($global:RegQryReleaseModel.actionsJobs) -Depth 40 -Compress; return }
+        if ($endpoint -match '/actions/runs/6000/attempts/1/jobs\?') { '[' + (ConvertTo-Json -InputObject @{jobs=@($global:RegQryReleaseModel.actionsJobs)} -Depth 40 -Compress) + ']'; return }
         if ($endpoint -match '/actions/runs/6000$') { $global:RegQryReleaseModel.actionsRun | ConvertTo-Json -Depth 40 -Compress; return }
         if ($endpoint -match '/immutable-releases$') {
             if ($arguments -contains 'PUT') { $global:RegQryReleaseModel.writes++; $global:RegQryReleaseModel.settingsEnabled = $true; return }
@@ -98,6 +109,7 @@ function gh {
         'create' {
             $global:RegQryReleaseModel.writes++
             $global:RegQryReleaseModel.remote = [pscustomobject]@{ id = 123; tag_name = 'v0.1.0'; draft = $true; immutable = $false; body = 'Synthetic notes'; assets = @() }
+            $global:RegQryReleaseModel.invisibleDraftReads = 2
         }
         'upload' {
             $global:RegQryReleaseModel.writes++
@@ -274,7 +286,39 @@ try {
     # Exercise the unchanged top-level script. Only external metadata/remote
     # commands and the not-yet-prepared changelog entry are supplied by the model.
     $modelScript = Join-Path $PSScriptRoot 'release.ps1'
-    Test-ReleaseCase 'freeze exact original core assets and verify downloads' { & $modelScript -Action Freeze -Tag 'v0.1.0' -InputDirectory $buildRoot -OutputDirectory (Join-Path $fixtureRoot 'freeze') | Out-Null; if (@($global:RegQryReleaseModel.remote.assets).Count -ne 6) { throw 'Incomplete frozen asset set' } }
+    Test-ReleaseCase 'freeze exact original assets after delayed created-draft visibility' { & $modelScript -Action Freeze -Tag 'v0.1.0' -InputDirectory $buildRoot -OutputDirectory (Join-Path $fixtureRoot 'freeze') | Out-Null; if (@($global:RegQryReleaseModel.remote.assets).Count -ne 6 -or $global:RegQryReleaseModel.readbackSleeps -ne 2 -or $global:RegQryReleaseModel.writes -ne 7) { throw 'Delayed readback lost originals or repeated a write' } }
+    Test-ReleaseCase 'empty paginated jobs stay empty' {
+        $global:RegQryReleaseModel.apiPages = '[{"jobs":[]}]'
+        if (@(Get-ReleaseApiItems 'repos/inaku-Gyan/RegQry/model-pages' 'jobs').Count -ne 0) { throw 'Empty page fabricated items' }
+    }
+    Test-ReleaseCase 'single artifact retains its object identity' {
+        $global:RegQryReleaseModel.apiPages = '[{"artifacts":[{"id":17,"name":"original"}]}]'
+        $items = @(Get-ReleaseApiItems 'repos/inaku-Gyan/RegQry/model-pages' 'artifacts')
+        if ($items.Count -ne 1 -or $items[0].id -ne 17 -or $items[0].name -cne 'original') { throw 'Single-item pagination changed identity' }
+    }
+    Test-ReleaseCase 'all jobs across multiple pages and an empty page are retained' {
+        $global:RegQryReleaseModel.apiPages = '[{"jobs":[]},{"jobs":[{"id":1}]},{"jobs":[{"id":2},{"id":3}]}]'
+        $items = @(Get-ReleaseApiItems 'repos/inaku-Gyan/RegQry/model-pages' 'jobs')
+        if ($items.Count -ne 3 -or ($items.id -join ',') -cne '1,2,3') { throw 'Pagination omitted or reordered jobs' }
+    }
+    foreach ($badPage in @('[{"total_count":0}]', '[{"jobs":{"id":1}}]', '[{"jobs":[null]}]')) {
+        Test-ReleaseCase ('malformed pagination is unknown: ' + $badPage) {
+            $global:RegQryReleaseModel.apiPages = $badPage
+            Assert-Rejected { Get-ReleaseApiItems 'repos/inaku-Gyan/RegQry/model-pages' 'jobs' } 'malformed'
+        }
+    }
+    Test-ReleaseCase 'created-draft readback is bounded without repeating writes' {
+        $before = $global:RegQryReleaseModel.writes; $sleeps = $global:RegQryReleaseModel.readbackSleeps
+        $global:RegQryReleaseModel.invisibleDraftReads = 10
+        try { Assert-Rejected { Wait-ReleaseCreatedDraft 'inaku-Gyan/RegQry' 'v0.1.0' } 'not visible' } finally { $global:RegQryReleaseModel.invisibleDraftReads = 0 }
+        if ($global:RegQryReleaseModel.writes -ne $before -or $global:RegQryReleaseModel.readbackSleeps -ne ($sleeps + 7)) { throw 'Readback limit repeated a write or exceeded its bound' }
+    }
+    Test-ReleaseCase 'created-draft API failure stays unknown without readback retries' {
+        $before = $global:RegQryReleaseModel.writes; $sleeps = $global:RegQryReleaseModel.readbackSleeps
+        $global:RegQryReleaseModel.remoteFailure = $true
+        try { Assert-Rejected { Wait-ReleaseCreatedDraft 'inaku-Gyan/RegQry' 'v0.1.0' } 'unknown' } finally { $global:RegQryReleaseModel.remoteFailure = $false }
+        if ($global:RegQryReleaseModel.writes -ne $before -or $global:RegQryReleaseModel.readbackSleeps -ne $sleeps) { throw 'Read error was treated as absence' }
+    }
     $candidatePath = $global:RegQryReleaseModel.remoteFiles['candidate-manifest.json']
     $candidate = Read-ReleaseJson $candidatePath
     Test-ReleaseCase 'candidate validates both native model identities' { Assert-ReleaseCandidate $candidate 'v0.1.0' $global:RegQryReleaseModel.fakeCommit }
