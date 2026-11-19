@@ -1,0 +1,27 @@
+[package]
+name = "regqry"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.100.0"
+description = "Search and inspect the Windows Registry from the command line"
+license = "MIT"
+repository = "https://github.com/inaku-Gyan/RegQry"
+readme = "README.md"
+keywords = ["windows", "registry", "cli", "search"]
+categories = ["command-line-utilities", "os::windows-apis"]
+include = [
+    "/Cargo.toml", "/Cargo.lock", "/LICENSE", "/README.md", "/CHANGELOG.md",
+    "/src/**", "/tests/**", "/docs/usage.md", "/docs/matching.md",
+    "/docs/compatibility.md", "/docs/testing.md", "/docs/architecture.md",
+]
+
+[target.'cfg(windows)'.dependencies]
+jiff = { version = "1.0.1", default-features = false, features = ["std", "tz-system", "tzdb-bundle-platform"] }
+clap = { version = "4.6.8", default-features = false, features = ["std", "help", "usage", "error-context", "wrap_help"] }
+hex = "0.4.3"
+regex = "1.13.2"
+yash-fnmatch = "1.1.2"
+
+[target.'cfg(windows)'.dev-dependencies]
+assert_cmd = "2.2.2"
+tempfile = "3.27.0"

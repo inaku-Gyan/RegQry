@@ -1,0 +1,118 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_call:
+  workflow_dispatch:
+  schedule:
+    - cron: '13 3 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  native:
+    if: github.event_name != 'schedule'
+    name: Native ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2025-vs2026
+            target: x86_64-pc-windows-msvc
+          - runner: windows-11-vs2026-arm
+            target: aarch64-pc-windows-msvc
+    runs-on: ${{ matrix.runner }}
+    env:
+      RUSTUP_TOOLCHAIN: 1.100.0-${{ matrix.target }}
+      CARGO_BUILD_WARNINGS: deny
+      CARGO_TERM_COLOR: never
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install pinned native Rust
+        run: |
+          rustup toolchain install $env:RUSTUP_TOOLCHAIN --profile minimal --component clippy --component rustfmt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Format
+        if: matrix.target == 'x86_64-pc-windows-msvc'
+        run: ./scripts/check.ps1 -Check format -ExpectedHost '${{ matrix.target }}'
+      - name: Clippy
+        run: ./scripts/check.ps1 -Check lint -ExpectedHost '${{ matrix.target }}'
+      - name: Tests
+        run: ./scripts/check.ps1 -Check test -ExpectedHost '${{ matrix.target }}'
+      - name: Package and independent source installation
+        run: ./scripts/check.ps1 -Check package -ExpectedHost '${{ matrix.target }}'
+      - name: Preserve package-check records
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: package-check-${{ matrix.target }}
+          path: artifacts/package-check/**/result.json
+          if-no-files-found: warn
+
+  dependencies:
+    runs-on: windows-2025-vs2026
+    env:
+      CARGO_TERM_COLOR: never
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install pinned Rust
+        run: |
+          rustup toolchain install 1.100.0 --profile minimal
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Install dependency checker
+        run: |
+          $version = (Import-PowerShellDataFile ./scripts/tools.psd1).CargoDeny
+          $toolRoot = Join-Path $env:RUNNER_TEMP 'regqry-tools'
+          cargo install --version $version --locked --root $toolRoot cargo-deny
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          (Join-Path $toolRoot 'bin') | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - name: Fetch and check using a fresh cache
+        run: ./scripts/check-dependencies.ps1 -CacheParent $env:RUNNER_TEMP
+      - name: Preserve dependency-check records
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dependency-check
+          path: artifacts/dependencies/result.json
+          if-no-files-found: warn
+
+  unsupported-platform:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install pinned Rust
+        run: rustup toolchain install 1.100.0 --profile minimal
+      - name: Verify the product rejects non-Windows targets
+        shell: bash
+        run: |
+          set +e
+          cargo check --locked --bin regqry >unsupported.log 2>&1
+          status=$?
+          set -e
+          cat unsupported.log
+          if [ "$status" -eq 0 ]; then
+            echo 'Non-Windows compilation unexpectedly succeeded'
+            exit 1
+          fi
+          rg --fixed-strings 'RegQry supports Windows only.' unsupported.log
