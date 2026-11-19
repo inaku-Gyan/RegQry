@@ -54,12 +54,35 @@ jobs:
         run: ./scripts/check.ps1 -Check test -ExpectedHost '${{ matrix.target }}'
       - name: Package and independent source installation
         run: ./scripts/check.ps1 -Check package -ExpectedHost '${{ matrix.target }}'
+      - name: Build and relocate native static-CRT test bundle
+        run: |
+          $metadataText = cargo metadata --locked --no-deps --format-version 1
+          if ($LASTEXITCODE -ne 0) { throw 'Cargo metadata failed' }
+          $metadata = $metadataText | ConvertFrom-Json
+          $package = @($metadata.packages | Where-Object name -eq 'regqry')[0]
+          $source = Join-Path $metadata.target_directory ('package/regqry-' + $package.version + '.crate')
+          ./scripts/build-test-bundle.ps1 -SourceArchive $source -OutputDirectory artifacts/portable-tests -Target '${{ matrix.target }}'
+          $built = Get-Content artifacts/portable-tests/build.json -Raw -Encoding utf8 | ConvertFrom-Json
+          ./scripts/check-test-bundle.ps1 -BundleArchive $built.bundle.archive -ExpectedArchiveSha256 $built.bundle.sha256 -ExpectedManifestSha256 $built.bundle.manifestSha256 -ReportDirectory artifacts/portable-test-check
+          ./scripts/test-bundle-gates.ps1 -BundleDirectory $built.bundle.directory -BundleArchive $built.bundle.archive -ReportDirectory artifacts/portable-test-gates
       - name: Preserve package-check records
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: package-check-${{ matrix.target }}
           path: artifacts/package-check/**/result.json
+          if-no-files-found: warn
+      - name: Preserve portable tests and relocation records
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: portable-tests-${{ matrix.target }}
+          path: |
+            artifacts/portable-tests/*.zip
+            artifacts/portable-tests/build.json
+            artifacts/portable-tests/*.jsonl
+            artifacts/portable-test-check/**
+            artifacts/portable-test-gates/**
           if-no-files-found: warn
 
   dependencies:

@@ -2,13 +2,32 @@
 
 Tests cover the actual CLI argument contract, pattern/type/root/time validation, query grouping and completeness, raw value interpretation, environment expansion, and fixed output. CLI subprocess tests exercise help/version and invalid input without registry access. Run `cargo test --locked` or the contribution check script.
 
-Integration tests find the CLI relative to their runtime executable, or use the explicit `REGQRY_TEST_BIN` path. They do not embed the build machine's absolute directory. This supports later portable test bundles; the test bundle generator is not implemented yet.
+Integration tests find the CLI relative to their runtime executable, or use the explicit `REGQRY_TEST_BIN` path. They do not embed the build machine's absolute directory. The portable test runner supplies the bundled CLI explicitly.
 
 Query tests use deterministic in-memory sources and a native temporary application hive. RegLoadAppKey creates a new hive inside a unique temporary directory; setup writes only through that private handle. The native case covers a 6,000-character value name, a 256 KiB value, an unknown type code, exact saved bytes and the query/output path; closing all handles and explicit temporary-directory cleanup are checked. Ordinary tests do not create globally navigable registry fixtures or request elevation. Application hives do not prove CLI ROOT, WOW64 view separation, or per-child ACL behavior.
 
 Real root/view/ACL/link cases run only in explicitly started, disposable VM suites. Create a private namespace with a fresh identity, check creation disposition and ownership, and limit cleanup to that fixture. Links use VM rollback/destruction as the final cleanup boundary. Test setup privileges and the actual ordinary-user query token are separate. Never use the user's existing registry as a fixed expected-result dataset.
 
-Portable test bundles must contain the actual candidate CLI/test executables/helpers/fixtures and their hashes. Check every executable's DLL/CRT dependencies. Run relocated bundles on clean minimum systems without Cargo. Doctests that require rustc stay in build environments.
+From a repository checkout, build a development test bundle from the actual Cargo archive, using the pinned native compiler and MSVC tools:
+
+```powershell
+./scripts/check.ps1 -Check package
+# For this version and the default Cargo target directory:
+./scripts/build-test-bundle.ps1 -SourceArchive target/package/regqry-0.1.0.crate -OutputDirectory artifacts/portable-tests
+$built = Get-Content artifacts/portable-tests/build.json -Raw -Encoding utf8 | ConvertFrom-Json
+./scripts/check-test-bundle.ps1 -BundleArchive $built.bundle.archive -ExpectedArchiveSha256 $built.bundle.sha256 -ExpectedManifestSha256 $built.bundle.manifestSha256
+./scripts/test-bundle-gates.ps1 -BundleDirectory $built.bundle.directory -BundleArchive $built.bundle.archive
+```
+
+Choose a new output directory each time. If `CARGO_TARGET_DIR` is configured, use its `package/` directory instead. The builder extracts the archive outside the repository, compiles the actual CLI and all Cargo test harnesses with `-C target-feature=+crt-static`, and obtains executable paths from Cargo's JSON messages. It copies every harness, including empty or ignored inventories; it does not select executables using a loose output-directory glob. Runtime fixtures are currently constructed by those harnesses. Doctests that require rustc stay in build environments.
+
+The bundle includes a manifest of source/lock/commit, toolchain, target, flags, file sizes/hashes, test names and ignored counts. MSVC `dumpbin /IMPORTS` checks direct and delay-load DLLs on every executable, and `/HEADERS` checks the machine code. Dynamic CRT and DLLs outside the reviewed system list fail. Raw tool output and the tool's version/hash are retained. These checks do not prove dynamic LoadLibrary calls, imported API availability or minimum-system compatibility. See the [Rust CRT reference](https://doc.rust-lang.org/reference/linkage.html#static-and-dynamic-c-runtimes) and [Microsoft import inspection](https://learn.microsoft.com/en-us/cpp/build/reference/imports-dumpbin).
+
+Extract the whole ZIP on the matching native architecture and run `./run-tests.ps1` with PowerShell 5.1 or 7. No Rust installation, elevation, or network is required by the test layer. An optional `-ExpectedManifestSha256` binds execution to a separately retained identity. The runner checks the complete payload and test/PE inventories before starting programs, then records actual OS/native/process architecture, user SID/token elevation, shell, executable identity, arguments, exit codes, timings and captured UTF-8 streams. Ignored cases remain explicitly ignored. Reports go to a new directory outside the verified bundle. Hashes establish byte identity, not authentication.
+
+`check-test-bundle.ps1` extracts the ZIP into a new path containing spaces and Unicode, runs from an unrelated working directory, removes Cargo/rustc from PATH, clears inherited test-path overrides and restores its environment afterward. `test-bundle-gates.ps1` uses disposable copies to verify hash corruption, missing/extra files, incomplete harness/PE inventories and the wrong PE architecture fail before payload execution; it can also check a supplied dynamic-CRT executable with `-DynamicExecutable`. Native CI builds and relocates bundles on both architectures and retains the ZIP and records as temporary Actions artifacts.
+
+Build directories and probe copies remain in uniquely named OS temporary directories for inspection; reports identify their locations. The current bundles are development checks, not frozen release assets. Final test bundles must use the actual frozen candidate bytes and reviewed third-party distribution materials, then run on the clean minimum systems without Cargo. Hosted/local development runs and a restricted PATH do not establish a clean system. Formal evidence is archived with the release rather than relying only on expiring Actions artifacts.
 
 Record pass, fail, not-run, and missing separately. Native hosted CI is distinct from x64 Windows 10 22H2 / x64 Windows 11 / ARM64 Windows 11 24H2 acceptance, ordinary users, clean systems, and actual shell/console runs. Missing resources remain release blockers. See [validation status](https://github.com/inaku-Gyan/RegQry/blob/main/docs/validation/README.md).
 

@@ -6,7 +6,7 @@ These are commitments to validate before release, not claims that this developme
 
 Both native architectures must verify 32/64 logical registry views. On ARM64, the 32-bit promise is the x86 view; the 64-bit view is native ARM64. View selection is independent of executable bitness and does not change the CLI process environment used by expansion.
 
-Planned ZIP packages explicitly use static MSVC CRT, undergo final DLL checks, and run on clean minimum systems without Rust, Build Tools, or an extra runtime installation. Those packages are not yet available. Cargo installation requires the fixed Rust version or a newer accepted compiler, native MSVC C++ tools, and a Windows SDK; only Rust 1.100.0 is tested. Registry-source installation does not inherit repository-only Cargo configuration.
+The development test-bundle builder explicitly uses static MSVC CRT and checks all executable DLL imports. Final user ZIP packages must use the same explicit linkage policy and run on clean minimum systems without Rust, Build Tools, or an extra runtime installation; released user packages are not yet available. Cargo installation requires the fixed Rust version or a newer accepted compiler, native MSVC C++ tools, and a Windows SDK; only Rust 1.100.0 is tested. Registry-source installation does not inherit repository-only Cargo configuration.
 
 Supported shell targets are cmd, Windows PowerShell 5.1, and PowerShell 7, in the classic console and optional Windows Terminal. The program uses fixed UTF-8 and does not change the host's profile, code page, or persistent settings.
 

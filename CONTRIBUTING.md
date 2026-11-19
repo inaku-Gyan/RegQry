@@ -10,6 +10,8 @@ Run the local checks from PowerShell 5.1 or PowerShell 7:
 
 For changes in progress, `./scripts/check.ps1 -AllowDirty` permits Cargo packaging of an uncommitted checkout. Release packaging always requires a clean tag. Individual checks are available with `-Check format`, `lint`, `test`, or `package`. Native CI runs on x64 and ARM64; the script can enforce a native compiler host with `-ExpectedHost`.
 
+Native CI also builds a static-CRT test bundle from the Cargo archive, checks PE imports, runs the relocated bundle without Cargo on PATH, and probes rejected file/inventory/architecture states. See [portable test commands](docs/testing.md). These hosted runs do not replace minimum-system or clean-system acceptance.
+
 The checks use locked dependencies, rustfmt, default Clippy, and warnings as errors. Add narrowly scoped lint exceptions only with a reason. Necessary unsafe Windows calls must state their SAFETY invariants. Add tests for observable contracts and meaningful failure cases; there is no global coverage percentage requirement.
 
 Dependency checks use the fixed cargo-deny version in `scripts/tools.psd1`. Install it with Cargo or use that exact official prebuilt release already installed elsewhere:

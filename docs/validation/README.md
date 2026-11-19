@@ -6,6 +6,8 @@ Local development checks are recorded in [foundation checks, 2026-11-19](foundat
 
 The subsequent query implementation has its own [readonly query checks](readonly-query-2026-11-19.md). These records do not replace the formal matrix below.
 
+Portable test tooling is recorded in [portable bundle checks](portable-bundle-2026-11-19.md), including native x64 static CRT, relocation, PowerShell 5.1/7, and failure probes.
+
 | Requirement | Current status |
 | --- | --- |
 | Native x64 and ARM64 hosted checks | Workflow implemented; remote execution pending |
@@ -14,7 +16,7 @@ The subsequent query implementation has its own [readonly query checks](readonly
 | Native ARM64 Windows 11 24H2 ordinary user and clean system | Missing environment |
 | Actual 32/64 view, ACL, links, long/malformed values | Reader/query implemented; private-hive subset checked; global VM suites pending |
 | Three shells on each formal system; 80/120-column representative console/Terminal runs | Product acceptance not run |
-| Portable candidate test bundles and DLL checks | Implementation pending |
+| Portable candidate test bundles and DLL checks | Development builder, x64 DLL checks and relocated tests passed; frozen candidates, ARM64 and clean minimum systems pending |
 | Candidate source/ZIP hashes and repeatable Cargo archive | Release implementation pending |
 | First local crates.io initialization, Trusted Publisher, registry installs and immutable release | Release implementation pending |
 
