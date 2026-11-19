@@ -21,4 +21,22 @@ The host is a native x64 development Windows client 10.0.26300, with non-elevate
 
 Production Rust code, dependency versions/features and Cargo.lock are unchanged. The lock remains SHA-256 `4302706560ffc6a88cc84ff6e1850f16ff5abc906e1b87dfb540606d86caccfd`. The earlier same-day online dependency audit still binds that graph; no new audit run is claimed by license collection. cargo-about does not replace the dependency audit or the additional native/runtime/asset review described in [distribution materials](../distribution.md).
 
-Clean-commit archive identities and their subsequent exact-byte PowerShell runs are retained separately in structured build/check reports and the implementation handoff; this avoids embedding an archive's own future commit/hash inside its input. Missing formal VM/native ARM64/minimum/clean-client/shell/visual records remain release blockers. Candidate freezing, evidence validation, OIDC/bootstrap, actual registry installs, immutable release settings and remote recovery/publication are not implemented or exercised by this phase. No push, PR, merge, tag or public release was made.
+## Subsequent clean-commit verification
+
+The artifacts below bind **`130ebce96585949c9e53b2025cdfedc327a384c3`**, the clean implementation commit. This section was added afterward as documentation only; it does not relabel/rebuild those artifacts as a later commit's output.
+
+Normal Cargo packaging verified 35 files, 293.6 KiB uncompressed, and an independent outside-Git source installation/version/help passed at `2026-11-19T15:13:47Z`. Repeating normal `cargo package --locked` under the same pinned compiler/Cargo and clean commit produced the identical archive SHA-256. The preserved 82,022-byte `.crate` is `11cd483960d26adec9ba7be2f423bf016f24db4fc41e3658d793bf9e5ed802a1`. Records: `artifacts/package-check/21ae3ca11d9b4835be45b4720e3d7543/result.json`, `artifacts/asset-source-repeat.json`.
+
+The native x64 asset build completed at `2026-11-19T15:14:22Z`, preserving the source's full 35-file inventory, including normalized/original Cargo.toml, lock and VCS metadata. All five static-CRT executables passed PE inspection. `artifacts/native-assets-final/build.json` binds:
+
+| Artifact | Bytes | SHA-256 |
+| --- | ---: | --- |
+| User ZIP | 1,524,644 | `11599fb0d78ad6a36488362a4d4a6eeccb9138d800ddaf634174d7d356982714` |
+| Test ZIP | 5,194,410 | `837990bfc6da97d06c9dac88a2a1591e29ca70ea7fd11b16082dd7e126ff4a1e` |
+| Shared CLI | — | `a7826d0eb08a956ac3686bd40143ce37c1f2b6236e948b6dc552b361da735c44` |
+
+User manifest SHA-256: `60338bbfe68fdc7a2329e6cb947f1bfccdb9ab976bc1b09a35b7ae72290a04d9`; test manifest: `819da1f086e0afb59ced8f86dbdb643e741d90f98ded257b438f11847464d6bf`.
+
+The same untouched ZIP bytes passed in **Windows PowerShell 5.1.26100.9818 and PowerShell 7.7.0**: each ran **47 ordinary tests**, kept **8 opt-in tests ignored**, and passed **43 rejection probes** (13 user assets, 12 portable tests, 15 VM guards, 3 live-observer guards). The native x64 Windows client 10.0.26300 runners recorded non-elevated tokens, no Cargo/rustc on PATH, and restored the caller's environment/working directory, including absent/empty variables and unrelated opt-in values. They finished at `15:15:31Z` / `15:15:27Z`; records: `artifacts/asset-ps51*` and `artifacts/asset-ps7*`. No global VM fixture or live observation was run.
+
+Missing formal VM/native ARM64/minimum/clean-client/shell/visual records remain release blockers. Candidate freezing, evidence validation, OIDC/bootstrap, actual registry installs, immutable release settings and remote recovery/publication are not implemented or exercised by this phase. No push, PR, merge, tag or public release was made.
