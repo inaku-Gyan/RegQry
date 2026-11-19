@@ -237,6 +237,10 @@ try {
     $OutputEncoding = [Text.UTF8Encoding]::new($false)
     $PSNativeCommandUseErrorActionPreference = $false
     $PSStyle.OutputRendering = 'PlainText'
+    $queryRoot = $env:REGQRY_SHELL_ROOT + '\'
+    if ($PSVersionTable.PSVersion.Major -le 5 -and $queryRoot.Contains(' ')) {
+        $queryRoot += '\'
+    }
 "#,
     );
     // PS5 has no PSStyle; guard it rather than producing an unrelated diagnostic.
@@ -249,7 +253,7 @@ try {
             ""
         };
         let prefix_ps = if !prefix_cmd.is_empty() {
-            "--key-root ($env:REGQRY_SHELL_ROOT + '\\') --view=64 "
+            "--key-root $queryRoot --view=64 "
         } else {
             ""
         };
@@ -452,8 +456,14 @@ pub(super) fn checks(directory: &Path, query: bool) -> String {
                     assert_eq!(
                         lf(&decoded(&bytes)),
                         expected,
-                        "{name} {} {suffix}",
-                        item.name
+                        "{name} {} {suffix}; exit={:?}; stderr={}",
+                        item.name,
+                        fs::read_to_string(work.join(format!("{}.capture.exit", item.name)))
+                            .unwrap_or_default(),
+                        decoded(
+                            &fs::read(work.join(format!("{}.capture.stderr", item.name)))
+                                .unwrap_or_default()
+                        )
                     );
                     if !bytes.is_empty() {
                         if *name == "pwsh" || suffix == "capture" {
