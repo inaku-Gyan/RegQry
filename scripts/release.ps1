@@ -1,13 +1,12 @@
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory)][ValidateSet('Inspect', 'Source', 'Freeze', 'Restore', 'Evidence', 'CargoStatus', 'CargoPreflight', 'CargoPublish', 'RegistryInstall', 'Finalize', 'Publish')][string]$Action,
+    [Parameter(Mandatory)][ValidateSet('Inspect', 'Source', 'Freeze', 'Restore', 'AcceptanceInputs', 'StageEvidence', 'Evidence', 'CargoStatus', 'CargoPreflight', 'CargoPublish', 'RegistryInstall', 'Finalize', 'Publish')][string]$Action,
     [Parameter(Mandatory)][string]$Tag,
     [string]$Repository = 'inaku-Gyan/RegQry',
     [Parameter(Mandatory)][string]$OutputDirectory,
     [string]$InputDirectory,
     [string]$EvidenceDirectory,
-    [string]$EvidenceUrl,
-    [string]$EvidenceSha256,
+    [ValidateSet('source', 'registry')][string]$EvidenceStage = 'source',
     [string]$CandidatePath,
     [string]$ExpectedCandidateSha256,
     [switch]$LocalBootstrap
@@ -15,6 +14,7 @@ param(
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'release/support.ps1')
 . (Join-Path $PSScriptRoot 'release/evidence.ps1')
+. (Join-Path $PSScriptRoot 'release/acceptance.ps1')
 $projectRoot = Split-Path -Parent $PSScriptRoot
 if ($Repository -cne 'inaku-Gyan/RegQry') { throw 'Release operations are restricted to the canonical repository' }
 $outputRoot = New-ReleaseDirectory $OutputDirectory
@@ -39,29 +39,12 @@ function Get-FrozenCandidate {
     [ordered]@{ candidate = $candidate; release = $release; path = $path }
 }
 function Read-AcceptanceInput {
+    param([switch]$RequireRegistry)
     if ($EvidenceDirectory) { return (Get-Item -LiteralPath $EvidenceDirectory).FullName }
-    if (-not $EvidenceUrl -and $frozen) {
-        $archived = @($frozen.release.assets | Where-Object name -ceq ('regqry-' + $Tag + '-validation.zip'))
-        if ($archived.Count -eq 1) {
-            $download = New-ReleaseDirectory (Join-Path $outputRoot 'archived-evidence')
-            $path = Get-ReleaseAsset $Repository $archived[0] $download
-            $expanded = Expand-ReleaseZip $path (Join-Path $outputRoot 'archived-validation')
-            return Join-Path $expanded ('regqry-' + $Tag + '-validation/acceptance')
-        }
-    }
-    if (-not $EvidenceUrl -or -not $EvidenceSha256) { throw 'Formal evidence is missing; keep the frozen draft and supply its original acceptance archive and SHA-256 on recovery' }
-    if ($EvidenceSha256 -cnotmatch '^[a-f0-9]{64}$') { throw 'Acceptance archive requires a lowercase SHA-256 digest' }
-    $uri = [uri]$EvidenceUrl
-    if ($uri.Scheme -cne 'https' -or $uri.UserInfo -or $uri.IsLoopback -or $uri.HostNameType -ne [UriHostNameType]::Dns) { throw 'Evidence requires an HTTPS DNS URL without credentials' }
-    # No GitHub/Cargo authorization is forwarded to the evidence host. Only data
-    # is accepted; the namespace and inventory are verified before use.
-    $archive = Join-Path $outputRoot 'acceptance-input.zip'
-    Invoke-WebRequest -Uri $uri -UseBasicParsing -OutFile $archive | Out-Null
-    if ((Get-ReleaseHash $archive) -cne $EvidenceSha256) { throw 'Acceptance download differs from the supplied digest' }
-    $expanded = Expand-ReleaseZip $archive (Join-Path $outputRoot 'acceptance-input')
-    $roots = @(Get-ChildItem -LiteralPath $expanded -Directory)
-    if ($roots.Count -ne 1 -or @(Get-ChildItem -LiteralPath $expanded -File).Count -ne 0) { throw 'Acceptance ZIP needs one top-level directory' }
-    $roots[0].FullName
+    $stage = if ($RequireRegistry) { 'registry' } else { 'source' }
+    $accepted = Resolve-ReleaseStagedEvidence $Repository $frozen.release $candidate $record.candidateId $stage (Join-Path $outputRoot 'accepted-evidence')
+    if (-not $accepted) { throw ('Original ' + $stage + ' acceptance is missing; keep the frozen draft and complete its hosted acceptance jobs') }
+    $accepted.root
 }
 try {
     $checkout = Get-ReleaseCheckout $projectRoot $Tag
@@ -78,7 +61,7 @@ try {
         if ($remote -and @($remote.assets | Where-Object name -ceq 'candidate-manifest.json').Count -eq 1) {
             $frozen = Get-FrozenCandidate
             foreach ($asset in $frozen.candidate.assets) {
-                $item = @($frozen.release.assets | Where-Object id -eq $asset.id)[0]
+                $item = @($frozen.release.assets | Where-Object name -ceq $asset.name)[0]
                 Get-ReleaseAsset $Repository $item $outputRoot | Out-Null
             }
             $record.state = if ($remote.draft) { 'frozen' } else { 'published' }
@@ -186,6 +169,34 @@ try {
             foreach ($asset in $candidate.assets) { Sync-ReleaseAsset $Repository $Tag (Join-Path $InputDirectory $asset.name) | Out-Null }
             Assert-ReleaseRemoteCandidate $candidate (Get-ReleaseRemote $Repository $Tag)
             $record.state = 'original-core-assets-restored'
+        } elseif ($Action -ceq 'AcceptanceInputs') {
+            $inputs = New-ReleaseDirectory (Join-Path $outputRoot 'inputs')
+            Copy-Item -LiteralPath $frozen.path -Destination (Join-Path $inputs 'candidate-manifest.json')
+            $core = New-ReleaseDirectory (Join-Path $outputRoot 'core')
+            foreach ($asset in $candidate.assets) { Get-ReleaseAsset $Repository (@($frozen.release.assets | Where-Object name -ceq $asset.name)[0]) $core | Out-Null }
+            foreach ($build in $candidate.builds) {
+                $targetRoot = New-ReleaseDirectory (Join-Path $inputs $build.target)
+                $testRoot = New-ReleaseDirectory (Join-Path $targetRoot 'tests')
+                Write-BundleJson $build (Join-Path $targetRoot 'build.json')
+                Copy-Item -LiteralPath (Join-Path $core $build.source.file) -Destination $targetRoot
+                Copy-Item -LiteralPath (Join-Path $core ('regqry-' + $Tag + '-' + $build.target + '.zip')) -Destination $targetRoot
+                Copy-Item -LiteralPath (Join-Path $core ('regqry-' + $Tag + '-tests-' + $build.target + '.zip')) -Destination $testRoot
+            }
+            foreach ($stage in @('source', 'registry')) {
+                $accepted = Resolve-ReleaseStagedEvidence $Repository (Get-ReleaseRemote $Repository $Tag) $candidate $record.candidateId $stage (Join-Path $outputRoot ($stage + '-evidence'))
+                if ($accepted) {
+                    Copy-Item -LiteralPath $accepted.archive -Destination (Join-Path $inputs (Get-ReleaseAcceptanceName $Tag $stage))
+                    Set-ReleaseOutput ($stage + '_state') 'accepted'
+                    Set-ReleaseOutput ($stage + '_sha256') $accepted.sha256
+                } else { Set-ReleaseOutput ($stage + '_state') 'missing' }
+            }
+            $record.state = 'original-inputs-ready'
+        } elseif ($Action -ceq 'StageEvidence') {
+            if (-not $InputDirectory) { throw 'Evidence staging requires the preserved original ZIP' }
+            $archive = Join-Path $InputDirectory (Get-ReleaseAcceptanceName $Tag $EvidenceStage)
+            $accepted = Set-ReleaseStagedEvidence $Repository $frozen.release $candidate $record.candidateId $EvidenceStage $archive (New-ReleaseDirectory (Join-Path $outputRoot 'stage'))
+            Set-ReleaseOutput ($EvidenceStage + '_sha256') $accepted.sha256
+            $record.state = 'original-evidence-staged'
         } elseif ($Action -ceq 'Evidence') {
             $evidenceRoot = Read-AcceptanceInput
             $record.evidence = Assert-ReleaseEvidence $candidate $record.candidateId $evidenceRoot
@@ -271,25 +282,26 @@ try {
                 $record.sourceSha256 = $source.sha256; $record.state = 'installed-from-registry'
             } finally { Pop-Location; Restore-BundleEnvironment $saved }
         } elseif ($Action -ceq 'Finalize') {
-            if (-not $InputDirectory) { throw 'Finalize requires both original native registry-install reports' }
+            $acceptedStages = @{}
+            foreach ($stage in @('source', 'registry')) {
+                $accepted = Resolve-ReleaseStagedEvidence $Repository (Get-ReleaseRemote $Repository $Tag) $candidate $record.candidateId $stage (Join-Path $outputRoot ($stage + '-original'))
+                if (-not $accepted) { throw 'Both original hosted acceptance archives must be staged before finalization' }
+                $acceptedStages[$stage] = $accepted
+            }
+            if ($acceptedStages.registry.evidence.sourceArchiveSha256 -cne $acceptedStages.source.sha256) { throw 'Registry acceptance is not based on the original source acceptance archive' }
             $existingValidation = @($frozen.release.assets | Where-Object name -ceq ('regqry-' + $Tag + '-validation.zip'))
             $existingBuild = @($frozen.release.assets | Where-Object name -ceq 'build-manifest.json')
             if ($existingBuild.Count -ne 0 -and $existingValidation.Count -ne 1) { throw 'Final build manifest exists without its original validation archive; recover the preserved original bytes' }
             if ($existingValidation.Count -eq 0) {
-            $evidenceRoot = Read-AcceptanceInput
+            $evidenceRoot = $acceptedStages.registry.root
             $record.evidence = Assert-ReleaseEvidence $candidate $record.candidateId $evidenceRoot -RequireRegistry
             $registry = Get-ReleaseRegistry $candidate (New-ReleaseDirectory (Join-Path $outputRoot 'registry'))
             if ($registry.status -cne 'published') { throw 'Cargo must be public and exact before GitHub finalization' }
             $validationRoot = New-ReleaseDirectory (Join-Path $outputRoot ('regqry-' + $Tag + '-validation'))
             Copy-Item -LiteralPath $evidenceRoot -Destination (Join-Path $validationRoot 'acceptance') -Recurse
             Copy-Item -LiteralPath (Join-Path $outputRoot 'registry/registry.json') -Destination $validationRoot
-            foreach ($target in @('x86_64-pc-windows-msvc', 'aarch64-pc-windows-msvc')) {
-                $installRoot = Join-Path $InputDirectory $target
-                $install = Read-ReleaseJson (Join-Path $installRoot 'result.json')
-                if ($install.status -cne 'pass' -or $install.action -cne 'RegistryInstall' -or $install.state -cne 'installed-from-registry' -or $install.candidateId -cne $record.candidateId -or $install.environment.nativeTarget -cne $target -or $install.sourceSha256 -cne $registry.candidateSha256) { throw 'Dual native registry installation is missing or identifies different bytes' }
-                $destination = New-ReleaseDirectory (Join-Path $validationRoot ('registry-install/' + $target))
-                foreach ($file in @('result.json', 'install.stdout.txt', 'install.stderr.txt', 'version.stdout.txt', 'version.stderr.txt', 'help.stdout.txt', 'help.stderr.txt', 'registry.json')) { Copy-Item -LiteralPath (Join-Path $installRoot $file) -Destination $destination }
-            }
+            $originals = New-ReleaseDirectory (Join-Path $validationRoot 'original')
+            foreach ($stage in @('source', 'registry')) { Copy-Item -LiteralPath $acceptedStages[$stage].archive -Destination (Join-Path $originals ($stage + '-acceptance.zip')) }
             $buildRecords = New-ReleaseDirectory (Join-Path $validationRoot 'candidate-records')
             foreach ($file in $candidate.records) {
                 Assert-ReleasePath $file.path
@@ -310,14 +322,25 @@ try {
                 $record.evidence = Assert-ReleaseEvidence $candidate $record.candidateId (Join-Path $validationRoot 'acceptance') -RequireRegistry
                 $validationFiles = @(Get-ReleaseInventory $validationRoot)
             }
+            foreach ($stage in @('source', 'registry')) {
+                if ((Get-ReleaseHash (Join-Path $validationRoot ('original/' + $stage + '-acceptance.zip'))) -cne $acceptedStages[$stage].sha256) { throw 'Final validation archive changed the original accepted ZIP bytes' }
+            }
             $assets = @($candidate.assets)
             $candidateAsset = @($frozen.release.assets | Where-Object name -ceq 'candidate-manifest.json')[0]
             $assets += [ordered]@{ name = 'candidate-manifest.json'; id = $candidateAsset.id; size = $candidateAsset.size; sha256 = $record.candidateId }
+            foreach ($stage in @('source', 'registry')) {
+                $accepted = $acceptedStages[$stage]
+                $assets += [ordered]@{ name=(Get-ReleaseAcceptanceName $Tag $stage); id=$accepted.asset.id; size=$accepted.asset.size; sha256=$accepted.sha256 }
+            }
             $assets += Sync-ReleaseAsset $Repository $Tag $validationArchive
             if ($existingBuild.Count -eq 1) {
                 $buildPath = Get-ReleaseAsset $Repository $existingBuild[0] $outputRoot
                 $buildManifest = Read-ReleaseJson $buildPath
-                if ($buildManifest.candidateId -cne $record.candidateId -or $buildManifest.commit -cne $candidate.commit -or $buildManifest.releaseId -ne $candidate.releaseId) { throw 'Existing final build manifest identifies another candidate' }
+                if ($buildManifest.schemaVersion -ne 1 -or $buildManifest.kind -cne 'regqry-release-build' -or $buildManifest.tag -cne $Tag -or $buildManifest.candidateId -cne $record.candidateId -or $buildManifest.commit -cne $candidate.commit -or $buildManifest.releaseId -ne $candidate.releaseId -or @($buildManifest.assets).Count -ne $assets.Count) { throw 'Existing final build manifest identifies another candidate or asset set' }
+                foreach ($asset in $assets) {
+                    $original = @($buildManifest.assets | Where-Object name -ceq $asset.name)
+                    if ($original.Count -ne 1 -or $original[0].size -ne $asset.size -or $original[0].sha256 -cne $asset.sha256) { throw 'Existing final build manifest changed an original asset identity' }
+                }
                 Assert-ReleaseInventory $validationRoot @($buildManifest.validationFiles)
             } else {
                 $buildManifest = [ordered]@{ schemaVersion = 1; kind = 'regqry-release-build'; tag = $Tag; commit = $candidate.commit; candidateId = $record.candidateId; releaseId = $candidate.releaseId; assets = $assets; validationFiles = $validationFiles; finalizedAtUtc = [DateTime]::UtcNow.ToString('o') }
@@ -332,12 +355,14 @@ try {
         } elseif ($Action -ceq 'Publish') {
             # This also handles retries after public success. Download and check
             # the complete exact attachment set before any mutation.
-            $expectedNames = @($candidate.assets.name) + @('candidate-manifest.json', ('regqry-' + $Tag + '-validation.zip'), 'build-manifest.json', 'SHA256SUMS')
+            $expectedNames = @($candidate.assets.name) + @('candidate-manifest.json', (Get-ReleaseAcceptanceName $Tag 'source'), (Get-ReleaseAcceptanceName $Tag 'registry'), ('regqry-' + $Tag + '-validation.zip'), 'build-manifest.json', 'SHA256SUMS')
             $remote = Get-ReleaseRemote $Repository $Tag
             if (@($remote.assets).Count -ne $expectedNames.Count -or @($remote.assets | Where-Object name -cnotin $expectedNames).Count -ne 0) { throw 'Final remote attachment set is incomplete or contains undeclared assets; recover original files before publishing' }
             foreach ($asset in $remote.assets) { if ($asset.name -cne 'candidate-manifest.json') { Get-ReleaseAsset $Repository $asset $outputRoot | Out-Null } }
             $build = Read-ReleaseJson (Join-Path $outputRoot 'build-manifest.json')
-            if ($build.schemaVersion -ne 1 -or $build.kind -cne 'regqry-release-build' -or $build.tag -cne $Tag -or $build.commit -cne $candidate.commit -or $build.candidateId -cne $record.candidateId -or $build.releaseId -ne $remote.id -or @($build.assets).Count -ne 7) { throw 'Final build manifest has a different identity or asset set' }
+            if ($build.schemaVersion -ne 1 -or $build.kind -cne 'regqry-release-build' -or $build.tag -cne $Tag -or $build.commit -cne $candidate.commit -or $build.candidateId -cne $record.candidateId -or $build.releaseId -ne $remote.id -or @($build.assets).Count -ne 9 -or @($build.assets.name | Select-Object -Unique).Count -ne 9) { throw 'Final build manifest has a different identity or asset set' }
+            $expectedBuildAssets = @($expectedNames | Where-Object { $_ -cnotin @('build-manifest.json', 'SHA256SUMS') })
+            if (@($build.assets | Where-Object name -cnotin $expectedBuildAssets).Count -ne 0) { throw 'Final build manifest omits an original archive or includes an undeclared asset' }
             foreach ($asset in $build.assets) {
                 $actual = @($remote.assets | Where-Object name -ceq $asset.name)
                 if ($actual.Count -ne 1 -or $actual[0].size -ne $asset.size -or $actual[0].digest -cne ('sha256:' + $asset.sha256)) { throw 'Final asset identity changed after staging' }
@@ -348,6 +373,11 @@ try {
             $validationRoot = Join-Path $expanded ('regqry-' + $Tag + '-validation')
             Assert-ReleaseInventory $validationRoot @($build.validationFiles)
             $record.evidence = Assert-ReleaseEvidence $candidate $record.candidateId (Join-Path $validationRoot 'acceptance') -RequireRegistry
+            foreach ($stage in @('source', 'registry')) {
+                $archive = Join-Path $outputRoot (Get-ReleaseAcceptanceName $Tag $stage)
+                Read-ReleaseAcceptanceArchive $candidate $record.candidateId $stage $archive | Out-Null
+                if ((Get-ReleaseHash (Join-Path $validationRoot ('original/' + $stage + '-acceptance.zip'))) -cne (Get-ReleaseHash $archive)) { throw 'Public acceptance asset differs from the original retained inside validation' }
+            }
             $registry = Get-ReleaseRegistry $candidate (New-ReleaseDirectory (Join-Path $outputRoot 'registry-final'))
             if ($registry.status -cne 'published') { throw 'Exact Cargo publication must be confirmed before GitHub promotion' }
             if ($remote.draft) {

@@ -4,15 +4,6 @@ on:
   push:
     tags: ['v*']
   workflow_dispatch:
-    inputs:
-      evidence_url:
-        description: HTTPS URL of preserved acceptance ZIP (data only; existing tag recovery)
-        type: string
-        required: false
-      evidence_sha256:
-        description: SHA-256 of that exact acceptance ZIP
-        type: string
-        required: false
 
 permissions:
   contents: read
@@ -27,8 +18,6 @@ env:
   CARGO_TERM_COLOR: never
   CARGO_BUILD_WARNINGS: deny
   RUSTUP_TOOLCHAIN: 1.100.0
-  RELEASE_EVIDENCE_URL: ${{ inputs.evidence_url || vars.RELEASE_EVIDENCE_URL }}
-  RELEASE_EVIDENCE_SHA256: ${{ inputs.evidence_sha256 || vars.RELEASE_EVIDENCE_SHA256 }}
 
 defaults:
   run:
@@ -66,9 +55,13 @@ jobs:
 
   quality:
     needs: inspect
+    permissions:
+      contents: read
+      actions: read
     uses: ./.github/workflows/ci.yml
     with:
       skip_native: ${{ needs.inspect.outputs.state != 'fresh' }}
+      skip_hosted: true
 
   source:
     needs: [inspect, quality]
@@ -180,17 +173,59 @@ jobs:
           path: artifacts/release-freeze/**
           if-no-files-found: warn
 
-  cargo:
+  acceptance-inputs:
     needs: [inspect, quality, freeze]
     if: >-
       always() && needs.quality.result == 'success' &&
-      (needs.freeze.result == 'success' || needs.inspect.outputs.state == 'frozen')
+      (needs.freeze.result == 'success' || needs.inspect.outputs.state == 'frozen' || needs.inspect.outputs.state == 'published')
     runs-on: windows-2025-vs2026
-    environment: release
     outputs:
-      candidate_id: ${{ steps.publish-cargo.outputs.candidate_id }}
+      candidate_id: ${{ steps.inputs.outputs.candidate_id }}
+      source_state: ${{ steps.inputs.outputs.source_state }}
+      source_sha256: ${{ steps.inputs.outputs.source_sha256 }}
+      registry_state: ${{ steps.inputs.outputs.registry_state }}
     permissions:
       contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install fixed Rust
+        run: |
+          rustup toolchain install 1.100.0 --profile minimal
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Restore original frozen inputs and discover accepted evidence
+        id: inputs
+        run: ./scripts/release.ps1 -Action AcceptanceInputs -Tag $env:RELEASE_TAG -OutputDirectory artifacts/acceptance-inputs
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-acceptance-inputs
+          path: artifacts/acceptance-inputs/inputs/**
+          if-no-files-found: error
+
+  source-acceptance:
+    needs: acceptance-inputs
+    if: needs.acceptance-inputs.outputs.source_state == 'missing'
+    permissions:
+      contents: write
+      actions: read
+    uses: ./.github/workflows/acceptance.yml
+    with:
+      stage: source
+      candidate_id: ${{ needs.acceptance-inputs.outputs.candidate_id }}
+
+  cargo:
+    needs: [inspect, acceptance-inputs, source-acceptance]
+    if: >-
+      always() && needs.acceptance-inputs.result == 'success' && needs.inspect.outputs.state != 'published' &&
+      (needs.acceptance-inputs.outputs.source_state == 'accepted' || needs.source-acceptance.result == 'success')
+    runs-on: windows-2025-vs2026
+    environment: release
+    permissions:
+      contents: write
+      actions: read
       id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -201,10 +236,10 @@ jobs:
         run: |
           rustup toolchain install 1.100.0 --profile minimal
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Validate formal evidence and inspect exact registry state
-        run: ./scripts/release.ps1 -Action CargoStatus -Tag $env:RELEASE_TAG -EvidenceUrl $env:RELEASE_EVIDENCE_URL -EvidenceSha256 $env:RELEASE_EVIDENCE_SHA256 -OutputDirectory artifacts/release-cargo-state
+      - name: Validate original hosted source acceptance and inspect exact registry state
+        run: ./scripts/release.ps1 -Action CargoStatus -Tag $env:RELEASE_TAG -OutputDirectory artifacts/release-cargo-state
       - name: Strict repeated Cargo archive check before requesting credentials
-        run: ./scripts/release.ps1 -Action CargoPreflight -Tag $env:RELEASE_TAG -EvidenceUrl $env:RELEASE_EVIDENCE_URL -EvidenceSha256 $env:RELEASE_EVIDENCE_SHA256 -OutputDirectory artifacts/release-cargo-preflight
+        run: ./scripts/release.ps1 -Action CargoPreflight -Tag $env:RELEASE_TAG -OutputDirectory artifacts/release-cargo-preflight
       - name: Exchange OIDC identity (also verifies first local bootstrap binding)
         id: auth
         uses: rust-lang/crates-io-auth-action@3268eb413133e2960fa4ae0e963ca76380c54cd9 # v1.0.6; post revokes token
@@ -213,7 +248,7 @@ jobs:
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
           REGQRY_OIDC_AUTH: 'true'
-        run: ./scripts/release.ps1 -Action CargoPublish -Tag $env:RELEASE_TAG -EvidenceUrl $env:RELEASE_EVIDENCE_URL -EvidenceSha256 $env:RELEASE_EVIDENCE_SHA256 -OutputDirectory artifacts/release-cargo-publish
+        run: ./scripts/release.ps1 -Action CargoPublish -Tag $env:RELEASE_TAG -OutputDirectory artifacts/release-cargo-publish
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
@@ -226,71 +261,38 @@ jobs:
             artifacts/release-cargo-publish/*.txt
           if-no-files-found: warn
 
-  registry-install:
-    needs: cargo
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runner: windows-2025-vs2026
-            target: x86_64-pc-windows-msvc
-          - runner: windows-11-vs2026-arm
-            target: aarch64-pc-windows-msvc
-    runs-on: ${{ matrix.runner }}
-    env:
-      RUSTUP_TOOLCHAIN: 1.100.0-${{ matrix.target }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - name: Read the candidate accepted by the Cargo job without draft privileges
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: release-cargo-records
-          path: artifacts/cargo-records
-      - name: Install pinned native Rust
-        run: |
-          rustup toolchain install $env:RUSTUP_TOOLCHAIN --profile minimal
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Install exact crates.io version with fresh Cargo home and install root
-        env:
-          GH_TOKEN: ''
-          ACCEPTED_CANDIDATE_ID: ${{ needs.cargo.outputs.candidate_id }}
-        run: ./scripts/release.ps1 -Action RegistryInstall -Tag $env:RELEASE_TAG -CandidatePath artifacts/cargo-records/release-cargo-publish/candidate-manifest.json -ExpectedCandidateSha256 $env:ACCEPTED_CANDIDATE_ID -OutputDirectory artifacts/registry-install
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: always()
-        with:
-          name: registry-install-${{ matrix.target }}
-          path: |
-            artifacts/registry-install/*.json
-            artifacts/registry-install/*.txt
-          if-no-files-found: warn
+  registry-acceptance:
+    needs: [cargo, acceptance-inputs, source-acceptance]
+    if: always() && needs.cargo.result == 'success' && needs.acceptance-inputs.outputs.registry_state == 'missing'
+    permissions:
+      contents: write
+      actions: read
+    uses: ./.github/workflows/acceptance.yml
+    with:
+      stage: registry
+      candidate_id: ${{ needs.acceptance-inputs.outputs.candidate_id }}
+      source_sha256: ${{ needs.acceptance-inputs.outputs.source_sha256 || needs.source-acceptance.outputs.sha256 }}
 
   finalize:
-    needs: registry-install
+    needs: [cargo, acceptance-inputs, registry-acceptance]
+    if: >-
+      always() && needs.cargo.result == 'success' &&
+      (needs.acceptance-inputs.outputs.registry_state == 'accepted' || needs.registry-acceptance.result == 'success')
     runs-on: windows-2025-vs2026
     permissions:
       contents: write
+      actions: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: registry-install-x86_64-pc-windows-msvc
-          path: artifacts/registry-installs/x86_64-pc-windows-msvc
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: registry-install-aarch64-pc-windows-msvc
-          path: artifacts/registry-installs/aarch64-pc-windows-msvc
       - name: Install fixed Rust
         run: |
           rustup toolchain install 1.100.0 --profile minimal
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Archive complete original evidence and stage final identities
-        run: ./scripts/release.ps1 -Action Finalize -Tag $env:RELEASE_TAG -InputDirectory artifacts/registry-installs -EvidenceUrl $env:RELEASE_EVIDENCE_URL -EvidenceSha256 $env:RELEASE_EVIDENCE_SHA256 -OutputDirectory artifacts/release-finalize
+        run: ./scripts/release.ps1 -Action Finalize -Tag $env:RELEASE_TAG -OutputDirectory artifacts/release-finalize
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:

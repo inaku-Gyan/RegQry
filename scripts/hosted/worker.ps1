@@ -55,12 +55,14 @@ try {
         $arguments += if ($config.registryInstall) { @('regqry','--version',('=' + $config.version)) } else { @('--path',$config.source) }
         $installation = Invoke-ReleaseProcess $config.cargo $arguments (Join-Path $config.reports 'installation') 1800
         if ($installation.timedOut -or $installation.exitCode -ne 0) { throw 'Ordinary-user Cargo installation failed' }
+        $registryArchiveSha256 = $null
         if ($config.registryInstall) {
             $archives = @(Get-ChildItem -LiteralPath (Join-Path $env:CARGO_HOME 'registry/cache') -Recurse -File -Filter ('regqry-' + $config.version + '.crate'))
             if ($archives.Count -ne 1 -or (Get-ReleaseHash $archives[0].FullName) -cne $config.sourceSha256) { throw 'The actual registry Cargo archive differs from the candidate bytes' }
+            $registryArchiveSha256 = Get-ReleaseHash $archives[0].FullName
         }
         $installedCli = Join-Path $installRoot 'bin/regqry.exe'
-        $record.installation = [ordered]@{ status='pass'; origin=$(if ($config.registryInstall) { 'registry' } else { 'source-archive' }); sourceSha256=$config.sourceSha256; compiler=$compiler; compilerSha256=(Get-ReleaseHash $config.compiler); cargoSha256=(Get-ReleaseHash $config.cargo); cliSha256=(Get-ReleaseHash $installedCli); command=$installation }
+        $record.installation = [ordered]@{ status='pass'; origin=$(if ($config.registryInstall) { 'registry' } else { 'source-archive' }); sourceSha256=$config.sourceSha256; registryArchiveSha256=$registryArchiveSha256; compiler=$compiler; compilerSha256=(Get-ReleaseHash $config.compiler); cargoSha256=(Get-ReleaseHash $config.cargo); cliSha256=(Get-ReleaseHash $installedCli); command=$installation }
         $env:PATH = (Join-Path $env:WINDIR 'System32') + ';' + $env:WINDIR
         & (Join-Path $config.bundle 'run-vm-tests.ps1') -Phase Query -DisposableVm -ContextPath $config.context -PowerShell7 $config.powerShell7 -ExpectedManifestSha256 $config.manifestSha256 -CliPath $installedCli -ReportDirectory (Join-Path $config.reports 'query-installed')
         $installedQuery = Read-ReleaseJson (Join-Path $config.reports 'query-installed/result.json')

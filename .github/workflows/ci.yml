@@ -11,6 +11,10 @@ on:
         description: Recovery refreshes advisories without rebuilding frozen assets
         type: boolean
         default: false
+      skip_hosted:
+        description: Release runs hosted acceptance against frozen candidate bytes instead
+        type: boolean
+        default: false
   workflow_dispatch:
   schedule:
     - cron: '13 3 * * 1'
@@ -119,7 +123,7 @@ jobs:
 
   hosted-registry:
     needs: native
-    if: github.event_name != 'schedule' && !inputs.skip_native
+    if: github.event_name != 'schedule' && !inputs.skip_native && !inputs.skip_hosted
     name: Ordinary-user registry ${{ matrix.target }}
     timeout-minutes: 40
     permissions:

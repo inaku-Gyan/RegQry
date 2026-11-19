@@ -1,8 +1,10 @@
 # Manual terminal acceptance record
 
+This manual matrix is deferred under the Actions-only first-release contract and is not a publication gate. Automated three-shell UTF-8/output/exit checks and actual console control events remain required. The following entries stay `not-run` until a human actually observes them.
+
 This is an unexecuted template. Copy it outside the verified test bundle and replace fields with actual observations and evidence links. A filled checkbox or an automated hidden-console run does not establish visual acceptance. Use the already prepared disposable VM fixture and the same verified CLI/test-bundle bytes; never create a fixture on the workstation for this check. Preserve external VM rollback/destruction evidence after the run.
 
-Required representative runs:
+Deferred representative runs:
 
 | Native system | Terminal | Columns | Status |
 | --- | --- | --- | --- |

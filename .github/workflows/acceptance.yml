@@ -1,0 +1,167 @@
+name: Frozen candidate acceptance
+
+on:
+  workflow_call:
+    inputs:
+      stage:
+        description: source or registry installation of the frozen candidate
+        required: true
+        type: string
+      candidate_id:
+        required: true
+        type: string
+      source_sha256:
+        description: Original source acceptance ZIP, required for registry collection
+        default: ''
+        type: string
+    outputs:
+      sha256:
+        value: ${{ jobs.collect.outputs.sha256 }}
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: pwsh
+
+jobs:
+  query:
+    name: ${{ inputs.stage }} ordinary-user ${{ matrix.target }}
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2025-vs2026
+            target: x86_64-pc-windows-msvc
+          - runner: windows-11-vs2026-arm
+            target: aarch64-pc-windows-msvc
+    runs-on: ${{ matrix.runner }}
+    env:
+      RUSTUP_TOOLCHAIN: 1.100.0-${{ matrix.target }}
+      ACCEPTANCE_STAGE: ${{ inputs.stage }}
+      ACCEPTANCE_TARGET: ${{ matrix.target }}
+      CARGO_TERM_COLOR: never
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-acceptance-inputs
+          path: artifacts/inputs
+          digest-mismatch: error
+      - name: Install fixed native compiler
+        run: |
+          rustup toolchain install $env:RUSTUP_TOOLCHAIN --profile minimal
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Run actual prepared fixture as a standard user, then independently install and repeat
+        env:
+          GH_TOKEN: ''
+          GITHUB_TOKEN: ''
+          CARGO_REGISTRY_TOKEN: ''
+          CARGO_REGISTRIES_CRATES_IO_TOKEN: ''
+        run: |
+          if ($env:ACCEPTANCE_STAGE -cnotin @('source', 'registry')) { throw 'Unknown acceptance stage' }
+          ./scripts/check-hosted-registry.ps1 -GitHubHostedVm -RegistryInstall:($env:ACCEPTANCE_STAGE -ceq 'registry') -InputDirectory (Join-Path artifacts/inputs $env:ACCEPTANCE_TARGET) -ReportDirectory artifacts/hosted -PowerShell7 (Join-Path $PSHOME 'pwsh.exe')
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: release-${{ inputs.stage }}-${{ matrix.target }}
+          path: artifacts/hosted/**
+          if-no-files-found: warn
+
+  collect:
+    needs: query
+    runs-on: windows-2025-vs2026
+    permissions:
+      contents: write
+      actions: read
+    outputs:
+      sha256: ${{ steps.recover.outputs[format('{0}_sha256', inputs.stage)] || steps.stage.outputs[format('{0}_sha256', inputs.stage)] }}
+    env:
+      RELEASE_TAG: ${{ github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+      RUSTUP_TOOLCHAIN: 1.100.0
+      ACCEPTANCE_STAGE: ${{ inputs.stage }}
+      ACCEPTED_CANDIDATE_ID: ${{ inputs.candidate_id }}
+      ORIGINAL_SOURCE_SHA256: ${{ inputs.source_sha256 }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install fixed Rust
+        run: |
+          rustup toolchain install 1.100.0 --profile minimal
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Reconcile any original ZIP preserved before an interrupted staging step
+        id: recover
+        run: ./scripts/release.ps1 -Action AcceptanceInputs -Tag $env:RELEASE_TAG -OutputDirectory artifacts/reconciled
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: steps.recover.outputs[format('{0}_state', inputs.stage)] == 'missing'
+        with:
+          name: release-${{ inputs.stage }}-x86_64-pc-windows-msvc
+          path: artifacts/hosted/x86_64-pc-windows-msvc
+          digest-mismatch: error
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: steps.recover.outputs[format('{0}_state', inputs.stage)] == 'missing'
+        with:
+          name: release-${{ inputs.stage }}-aarch64-pc-windows-msvc
+          path: artifacts/hosted/aarch64-pc-windows-msvc
+          digest-mismatch: error
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: inputs.stage == 'source' && steps.recover.outputs.source_state == 'missing'
+        with:
+          name: dependency-check
+          path: artifacts/audit
+          digest-mismatch: error
+      - name: Retain original quality records and run the explicitly synthetic recovery model
+        if: inputs.stage == 'source' && steps.recover.outputs.source_state == 'missing'
+        run: |
+          New-Item -ItemType Directory -Path artifacts/quality | Out-Null
+          Copy-Item artifacts/audit/result.json artifacts/quality/dependencies.json
+          ./scripts/test-release-gates.ps1 -ReportDirectory artifacts/release-model
+          Copy-Item artifacts/release-model/result.json artifacts/quality/release-model.json
+      - name: Collect actual completed job provenance and original logs, then pack once
+        if: steps.recover.outputs[format('{0}_state', inputs.stage)] == 'missing'
+        run: |
+          $parameters = @{
+            Stage = $env:ACCEPTANCE_STAGE
+            CandidatePath = 'artifacts/reconciled/inputs/candidate-manifest.json'
+            ExpectedCandidateSha256 = $env:ACCEPTED_CANDIDATE_ID
+            InputDirectory = 'artifacts/hosted'
+            OutputDirectory = 'artifacts/collected'
+          }
+          if ($env:ACCEPTANCE_STAGE -ceq 'source') { $parameters.QualityDirectory = 'artifacts/quality' }
+          else {
+            $parameters.SourceArchive = 'artifacts/reconciled/inputs/regqry-' + $env:RELEASE_TAG + '-source-acceptance.zip'
+            $parameters.ExpectedSourceSha256 = $env:ORIGINAL_SOURCE_SHA256
+          }
+          ./scripts/collect-release-evidence.ps1 @parameters
+      # Upload this exact ZIP before its draft marker/asset. Retries discover
+      # either original and restore its bytes rather than recompressing it.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: steps.recover.outputs[format('{0}_state', inputs.stage)] == 'missing'
+        with:
+          name: ${{ inputs.stage }}-acceptance-original
+          path: artifacts/collected/*.zip
+          if-no-files-found: error
+      - name: Stage and download-verify the original acceptance ZIP
+        id: stage
+        if: steps.recover.outputs[format('{0}_state', inputs.stage)] == 'missing'
+        run: ./scripts/release.ps1 -Action StageEvidence -Tag $env:RELEASE_TAG -EvidenceStage $env:ACCEPTANCE_STAGE -InputDirectory artifacts/collected -OutputDirectory artifacts/staged
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: release-${{ inputs.stage }}-collection
+          path: |
+            artifacts/collected/result.json
+            artifacts/staged/result.json
+            artifacts/reconciled/result.json
+          if-no-files-found: warn

@@ -1,55 +1,46 @@
 # Release evidence records
 
-Use the exact frozen candidate ID and original archives. This data contract checks record identity and completeness; actual operator observations, VM state, clean-system inventories and visual review remain human evidence. Synthetic model fixtures are only tests of the validator and must never be submitted as acceptance.
+Formal acceptance uses the exact frozen candidate and fresh native GitHub-hosted x64 Windows Server / ARM64 Windows 11 jobs. The [hosted acceptance contract](hosted-acceptance.md) distinguishes these executed environments from intended client compatibility. Minimum/clean clients and visible-terminal/physical-keyboard review are deferred and must remain `not-run`. Synthetic model fixtures test the validator; they are never formal acceptance.
 
-Create an unexecuted template, using the candidate SHA recorded by the staging run:
+The tag workflow collects records automatically through [acceptance.yml](../.github/workflows/acceptance.yml). It first exports the original frozen source, user/test archives and candidate manifest through `AcceptanceInputs`. The ordinary-user jobs have read-only workflow access and no publication credentials. After both complete, `collect-release-evidence.ps1` reads actual run/job metadata through the GitHub API, retains the original report trees and validates the evidence before packing it once.
+
+An optional unexecuted template is available for inspecting the data contract:
 
 ```powershell
 ./scripts/release-evidence.ps1 -Action New `
   -CandidatePath C:/candidate-manifest.json -ExpectedCandidateSha256 CANDIDATE_ID `
-  -Directory C:/acceptance-v0.1.0
+  -Directory C:/regqry-v0.1.0-acceptance
 ```
 
-Every status starts `missing`. Replace it only after actual execution. Keep `pass`, `fail`, `not-run`, `missing` distinct. `Pack` never changes statuses. Copy original portable and VM runner report trees into the nominated locations; their stdout/stderr references remain relative to the report, with no renamed or edited raw logs. Use ASCII file paths in the archive, while retaining original Unicode inside records and screenshots. No reparse points, parent paths, case collisions, unexpected files or payload execution are accepted.
+Every required template status starts `missing`; the two deferred groups start `not-run`. Keep `pass`, `fail`, `not-run`, `missing` distinct. `Pack` recalculates the file inventory and checks records; it never changes statuses. Preserve original report trees and relative stdout/stderr references without editing raw logs. Paths inside the archive use ASCII; original Unicode stays inside the records. Reparse points, parent paths, case collisions and undeclared files are rejected before extraction or interpretation. No archived code is executed by the evidence validator.
 
-`acceptance.json` binds schema version 1, kind `regqry-release-acceptance`, status, candidateId, tag, commit and all five core asset name/SHA pairs. `checks` contains exactly one A01–A14 mapping each, with status, concrete observation and nonempty `records` paths relative to this directory. These map the accepted CLI, filtering, patterns, data states, fidelity, query context, reads, roots/views/ACL/links, output/shells, completeness/cancellation, performance, engineering, platform/portable, and release/recovery requirements to original evidence. A group-level pass does not replace the detailed checks below. `files` inventories every original file except acceptance.json itself, by path/size/SHA; Pack calculates it.
+`acceptance.json` binds schema version **2**, kind `regqry-release-acceptance`, status, `stage` (`source` or `registry`), candidateId, tag, commit and all five core asset name/SHA pairs. `checks` contains exactly one A01-A14 mapping each, with status, observation and nonempty original-record paths. The actual ordinary tests and guarded fixture cases cover CLI/filter/data/query/root/output/process/scaling contracts; fresh dependency records and explicitly synthetic recovery-model results cover their respective checks. A group-level pass never substitutes for the detailed records. `files` inventories every file except acceptance.json by path/size/SHA. The source stage cannot claim that channel publication already occurred; final promotion verifies the actual registry and public downloads separately.
 
-The three `platforms` entries are `win10-x64`, `win11-x64`, `win11-arm64`. Record status, actual edition, displayVersion and channel `general-availability`. Client product type and native process/host identity come from the actual portable report. Win10 requires build 19045 / 22H2; x64 Win11 requires a stable client build; ARM64 Win11 requires build 26100 or later. A newer development/preview build, Server or emulation does not cover these records.
+The two `platforms` entries are `hosted-x64` and `hosted-arm64`. Each points to `sourceRun` / `sourceProvenance`, and later `registryRun` / `registryProvenance`. The reports retain actual OS build/product type, runner image version, target and process/native architecture. Emulation or a self-hosted job cannot fill these records. A newer ARM64 runner does not establish execution on the minimum 24H2 build; x64 Server does not establish x64 client execution.
 
-Each platform points to:
+Each original stage retains and checks:
 
-| Field | Required original record |
+| Record | Required content |
 | --- | --- |
-| portable | `run-tests.ps1` result.json and all referenced harness logs, matching the frozen manifest/source and exact test inventory, ordinary token, native client, Cargo/rustc absent from PATH |
-| vmPrepare / vmQuery | Original elevated Prepare and separate ordinary-user Query result.json trees from `run-vm-tests.ps1`; same context ID/nonce/hash/candidate, all seven phase-specific VM cases, actual guarded-fixture markers and passing raw summaries |
-| cleanSystem | Operator/VM inventory record described below; PATH removal alone is insufficient |
-| rollback | Actual external rollback/destruction record after VM Query completed |
-| sourceInstall | Actual independent candidate-archive installation and private-fixture query on that client |
-| registryInstall | Actual independent crates.io installation/private-fixture query on that client, collected after Cargo publication; required for final GitHub promotion |
-| terminals | Actual visible terminal observations at 80 and 120 columns |
+| controller result | Original source/user/test identities, separate elevated preparation and ordinary query SIDs, actual OS/image, matching workflow/run/attempt, successful temporary-account removal |
+| ordinary/ready.json | Actual non-elevated native token, loaded user hive and initialized Software/Classes; the profile holder stays alive during preparation |
+| prepare/result.json | One elevated preparation case and its raw output, candidate manifest and owned context ID/nonce/hash |
+| ordinary/query-bundle/ | Complete portable inventory plus six actual Query cases using the frozen bundled CLI |
+| ordinary/worker-result.json and installation logs | Independent installation by the ordinary account, pinned native Rust/Cargo identities, command/exit/timeout, source and installed executable hashes |
+| ordinary/query-installed/ | Complete portable preflight, then all six Query cases using that exact independently installed CLI |
+| provenance/*.json | Original REST run and completed successful job, canonical repository ID, release.yml, exact tag/commit, actual hosted runner/label and enclosing timestamps |
+| quality/*.json | Fresh cargo-deny 0.21.0 audit with lock/database/index identity and the explicitly synthetic release-model result |
 
-The VM Shell case must record all three actual shells and the `owned-vm-query` passing summary. Its `manual_terminal=not-run` marker is correct: visible review is independent. VM performance/process cases retain their actual measurements and known-fixture results, not apparatus-only or live-observation substitutes. Keep external context and cleanup records with original logs.
+Both query executions require actual ROOT/view, minimum-permission/partial-failure, link, process, shell and scaling cases. Raw logs must support the recorded pass counts and guarded phase/context. The Shell case needs all three shells and its `owned-vm-query` summary. Its `manual_terminal=not-run` marker is correct. The process/scaling cases use the actual installed/bundled CLI and owned fixture, not constructed-producer or live-observation substitutes.
 
-Supplemental JSON records use these fields (record paths are relative to the acceptance root):
+GitHub's [per-job hosted-VM lifecycle](https://docs.github.com/en/actions/how-tos/manage-runners/github-hosted-runners/use-github-hosted-runners) is the accepted fixture-disposal evidence. `lifecycle.observedDestruction` stays false: the workflow cannot observe its own VM being destroyed. Actual run/job records bind that contract to execution; a fabricated external destruction receipt is rejected. The existing `RollbackReference` field carries `github-actions:REPOSITORY/runs/RUN/attempts/ATTEMPT/jobs/JOB` for this path.
 
-| kind | Fields in addition to status |
-| --- | --- |
-| regqry-clean-system-record | candidateId, snapshotId, target, osVersion, developmentToolsInstalled=false, extraRuntimeInstalled=false, inventoryRecords pointing to actual VM/software/runtime inventories |
-| regqry-vm-rollback-record | contextId, reference equal to the prepared rollbackReference, action `rollback` or `destroy`, completedAtUtc after query completion, records pointing to actual hypervisor/external cleanup logs |
-| regqry-formal-source-install | candidateId, source `candidate-archive` or `crates.io`, sourceSha256, target, osVersion, compiler containing original `rustc -Vv` lines, cliSha256 of that installed executable, elevated=false, privateFixtureExitCode=0, records pointing to exact install commands/logs, source/cache/lock identity and the private-fixture query logs |
+Source installation uses `cargo install --path` on the original extracted candidate archive, with its complete source inventory checked. Registry installation uses the exact crates.io version, a fresh ordinary-user cache/target/install root and the actual cached .crate SHA matching the frozen source. Both record the exact executable subsequently used for the fixture suite. Version/help-only execution is insufficient.
 
-Source-install evidence must identify the exact installed executable used by the query and its owned fixture/context/cleanup. Do not use `--path` as proof of registry installation, a cached old executable, or hosted version/help as proof of private-fixture acceptance. Registry source SHA must equal the actual downloaded/index-verified candidate archive. Keep setup/query and clean-snapshot lifecycles explicit if separate VM snapshots are used.
+`deferredChecks` retains `minimum-clean-clients` and `visible-terminal-and-physical-keyboard` as `not-run`. Restricted PATH and hidden-console events cannot turn either into pass. Their detailed optional manual procedure remains in [the terminal guide](terminal-validation.md).
 
-Each `terminals` entry has terminal (`classic` or `windows-terminal`), columns (80 or 120), status, visible=true, actual version, measurement describing how actual dimensions were read, physicalCtrlCExitCode=130 and records linking screenshots/transcripts/exact commands/font/scaling/encoding and observed results from [the terminal guide](terminal-validation.md). Required combinations are Win10 classic; x64 Win11 Windows Terminal; ARM64 Win11 both. Automated hidden-console cancellation cannot fill these visual records.
+The source stage is packed once as `regqry-vVERSION-source-acceptance.zip`, uploaded first as the `source-acceptance-original` Actions artifact, then recorded by hash/run/artifact in the draft notes and uploaded/download-verified as a durable draft asset. Registry collection starts from that exact original ZIP, copies all its original files unchanged, and embeds the ZIP as `original/source-acceptance.zip`. It adds only actual registry records/provenance and binds the source ZIP hash. The resulting `regqry-vVERSION-registry-acceptance.zip` follows the same artifact/marker/durable-asset sequence.
 
-After completing pre-Cargo acceptance:
+Recovery reuses a valid durable ZIP unchanged. If an upload was interrupted, it reconciles the original artifact/marker before collecting again. A missing accepted source ZIP can be restored from the original embedded inside registry evidence; either stage can be restored from the final validation archive or its original, unexpired Actions artifact. A different hash, expired/lost originals or a missing public asset stops recovery. There is no external HTTPS evidence-host input and no rebuilding accepted ZIPs. Final validation retains both original stage ZIPs as well as the complete expanded records.
 
-```powershell
-./scripts/release-evidence.ps1 -Action Pack `
-  -CandidatePath C:/candidate-manifest.json -ExpectedCandidateSha256 CANDIDATE_ID `
-  -Directory C:/acceptance-v0.1.0 -ArchivePath C:/accepted-pre-cargo.zip
-```
-
-Preserve that original ZIP and its printed hash at an HTTPS location the runner can download without credentials. Supply its URL/hash to the same existing-tag recovery. After the actual registry version is public and installed/tested on all three clients, add those original registryInstall records, then pack a **new** archive path using `-RequireRegistry`. Update the evidence input for recovery; the candidate/user/test ZIP bytes stay identical. Finalization preserves the submitted evidence bytes/files inside the durable validation archive.
-
-Missing or failed records stop at the draft. Cargo can already be public while post-Cargo evidence is missing; this is an explicitly reported partial release, not a rollback or a reason to replace the candidate. Once the final validation archive is staged, recovery uses that original archive and never recompresses it. See [the release route](releasing.md) for authentication and current publication blockers.
+Missing or failed required records keep GitHub at the draft. Cargo can already be public while registry acceptance is incomplete; record that partial state without rolling back or replacing the candidate. See [the release route](releasing.md) for authentication, the first local package bootstrap and final promotion.

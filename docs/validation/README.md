@@ -1,6 +1,6 @@
 # Validation status
 
-No formal platform or release acceptance has passed yet. This index distinguishes the foundation's local/CI checks from future candidate evidence.
+No frozen-candidate release acceptance or channel publication has passed yet. Actual native hosted development checks, including standard-user registry queries and independent source installations, have passed. This index distinguishes executed development evidence, required candidate checks and deferred client/manual coverage. Older dated records retain the requirements and unexecuted state at that point; current policy is the [hosted acceptance contract](../hosted-acceptance.md).
 
 Local development checks are recorded in [foundation checks, 2026-11-19](foundation-2026-11-19.md).
 
@@ -24,20 +24,21 @@ Native user/test ZIP construction and original third-party notices are recorded 
 
 Tag/candidate/evidence/OIDC/recovery tooling, synthetic state tests and actual selected-tool x64 construction are recorded in [release orchestration checks](release-pipeline-2026-11-20.md). Repository setup uses the existing local gh identity; CI checks actual immutable publication without an App. No real channel operation has run.
 
-The first actual hosted x64/ARM64 execution, its integration failures/fixes and the tag-only release environment are recorded in [remote integration checks](integration-2026-11-20.md). Current revision results are available in [the integration PR checks](https://github.com/inaku-Gyan/RegQry/pull/1/checks).
+The first actual hosted x64/ARM64 execution, its integration failures/fixes and the tag-only release environment are recorded in [remote integration checks](integration-2026-11-20.md). Subsequent loaded standard-user profiles, actual fixture suites and independent source installations are recorded in [hosted ordinary-user checks](hosted-acceptance-2026-11-20.md). [Merged main CI](https://github.com/inaku-Gyan/RegQry/actions/runs/44592042469) passed all six jobs.
 
 | Requirement | Current status |
 | --- | --- |
-| Native x64 and ARM64 hosted checks | Actual tests, Clippy and source installation passed both hosts in the first run; full current outcome is recorded in the integration PR checks |
-| x64 Windows 10 22H2 ordinary user and clean system | Missing environment |
-| Representative x64 Windows 11 client | Product acceptance not run |
-| Native ARM64 Windows 11 24H2 ordinary user and clean system | Missing environment |
-| Actual 32/64 view, ACL, links, long/malformed values | Opt-in ROOT/view/ACL/link VM suite implemented, not run; private-hive long/malformed data and controlled changes checked on both hosted architectures |
-| Three shells on each formal system; 80/120-column representative console/Terminal runs | Local three-shell no-query checks passed; owned-VM query case and manual record template implemented; formal/visual acceptance not run |
-| Actual CLI Ctrl+C, closed pipeline and fixed generated streaming baseline | VM case implemented, not run; isolated constructed-producer control probe passed locally |
-| Deep/wide scaling and representative live-query baselines | Generator/private-hive readback and consumer checked; twelve aggregate-only development live observations recorded, all incomplete; actual CLI VM/formal series not run |
-| Portable candidate test bundles and DLL checks | Development builder, x64 DLL checks and relocated tests passed; frozen candidates, ARM64 and clean minimum systems pending |
-| Production/test distribution materials and user ZIPs | Implemented; both Windows dependency graphs checked; local native x64 asset checks passed; native ARM64 execution and final distribution review pending |
+| Native x64 and ARM64 hosted checks | Both native jobs passed Clippy, 47 ordinary tests, packaging/source install, static-CRT assets and rejection probes; dedicated standard-user jobs also passed |
+| x64 Windows 10 22H2 ordinary user and clean system | Unexecuted compatibility target; deferred outside first-release gates |
+| Representative x64 Windows 11 client | Unexecuted compatibility target; deferred outside first-release gates |
+| Native ARM64 Windows 11 minimum 24H2 and clean system | Later native hosted Win11 build executed; exact minimum/clean client remains unexecuted and deferred |
+| Actual 32/64 view, ACL, links, long/malformed values | Owned ROOT/view/ACL/link suite passed as a standard user on both hosted architectures, using both bundled and independently source-installed CLIs; native long/malformed application-hive tests also passed |
+| Three actual shells and automatic UTF-8/output/exit checks | Passed for actual fixture queries on both native hosts and both executable origins; each frozen candidate must repeat them |
+| Visible terminals at 80/120 columns and physical keyboard Ctrl+C | Not run; deferred outside first-release gates |
+| Actual CLI Ctrl+C, closed pipeline and generated streaming baseline | Actual owned-fixture CLI process case passed on both native hosts and both executable origins; generated real console event establishes automated cancellation, not physical input |
+| Deep/wide scaling and representative live-query baselines | Actual fixed owned-fixture scaling passed on both native hosts and both origins; twelve separate development live observations remain incomplete and are not correctness evidence |
+| Portable candidate test bundles and DLL checks | Both native development ZIPs passed import/relocation/inventory checks; frozen candidate execution pending, minimum/clean systems deferred |
+| Production/test distribution materials and user ZIPs | Both native development builders and production/test notices/material/import checks passed; actual candidate distribution remains pending |
 | Candidate source/ZIP hashes and repeatable Cargo archive | Construction/freezing/recovery implemented; local clean x64 repetition and state model checked; actual frozen tagged candidate pending |
 | First local crates.io initialization, Trusted Publisher, registry installs and immutable release | Scripts/workflow implemented; existing local identity handles repository setup, no App/PAT fallback; real channel execution pending |
 
