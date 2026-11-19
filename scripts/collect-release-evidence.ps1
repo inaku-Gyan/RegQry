@@ -58,7 +58,7 @@ foreach ($id in @('hosted-x64','hosted-arm64')) {
         $hosted.workflow.runId -notmatch '^[0-9]+$' -or $hosted.workflow.attempt -notmatch '^[0-9]+$') { throw 'A required original hosted result did not execute successfully for this candidate' }
     $runId = $hosted.workflow.runId; $attempt = $hosted.workflow.attempt
     $run = (Invoke-ReleaseGh @('api',("repos/inaku-Gyan/RegQry/actions/runs/$runId"))) -join [char]10 | ConvertFrom-Json
-    $jobs = (Invoke-ReleaseGh @('api','--paginate','--slurp',("repos/inaku-Gyan/RegQry/actions/runs/$runId/attempts/$attempt/jobs?per_page=100"),'--jq','[.[].jobs[]]')) -join [char]10 | ConvertFrom-Json
+    $jobs = @(Get-ReleaseApiItems "repos/inaku-Gyan/RegQry/actions/runs/$runId/attempts/$attempt/jobs?per_page=100" 'jobs')
     $matchingJobs = @($jobs | Where-Object {
         $_.runner_name -ceq $hosted.workflow.runner -and $_.run_attempt -eq $attempt -and $_.status -ceq 'completed' -and
         [DateTimeOffset]$_.started_at -le [DateTimeOffset]$hosted.startedAtUtc -and [DateTimeOffset]$_.completed_at -ge [DateTimeOffset]$hosted.finishedAtUtc

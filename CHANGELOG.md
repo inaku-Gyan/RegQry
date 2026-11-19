@@ -4,6 +4,21 @@ Version entries are reviewed before their release tags. See [GitHub Releases](ht
 
 ## Unreleased
 
+## [0.1.2] - 2026-11-20
+
+Initial read-only registry search candidate: multiple roots and views, field-specific regex/glob/data/type/time filters, grouped UTF-8 previews, cancellation and explicit incomplete-query status. Full query features and limitations are listed under 0.1.0.
+
+### Fixed
+
+- Read every page of GitHub job/artifact metadata using compatible gh arguments and the existing JSON decoder. Empty, single-item and multiple-page responses retain their actual meaning; malformed data remains unknown.
+- Retry missing readback after successful draft creation, with bounded reads and no repeated creation/upload. Read errors still stop the release.
+- Check the real gh client against read-only workflow metadata in CI, in addition to synthetic recovery tests.
+
+### Release status
+
+- The v0.1.1 candidate remains frozen and unchanged after input export failed; it never reached source acceptance, Cargo upload or public GitHub publication. Corrected code uses a new tag/version.
+- Executables are unsigned. Automated acceptance uses native hosted x64 Windows Server and ARM64 Windows 11; minimum/clean clients and human terminal/physical-keyboard checks remain deferred. See the [compatibility notes](docs/compatibility.md).
+
 ## [0.1.1] - 2026-11-20
 
 First publication candidate, containing the initial read-only registry search features described under 0.1.0.

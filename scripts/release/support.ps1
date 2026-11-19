@@ -88,6 +88,23 @@ function Invoke-ReleaseGh {
     $result
 }
 
+function Get-ReleaseApiItems {
+    param([string]$Endpoint, [ValidateSet('artifacts', 'jobs')][string]$Property)
+    # gh owns pagination. Parse its raw pages with PowerShell's JSON decoder;
+    # --slurp cannot be combined with gh's --jq or --template formatters.
+    $pages = (Invoke-ReleaseGh @('api', '--paginate', '--slurp', $Endpoint)) -join "`n" | ConvertFrom-Json
+    if ($null -eq $pages) { throw 'GitHub pagination returned no pages; state is unknown' }
+    foreach ($page in @($pages)) {
+        if ($page -isnot [pscustomobject]) { throw 'GitHub pagination returned a malformed page; state is unknown' }
+        $items = $page.PSObject.Properties[$Property]
+        if ($null -eq $items -or $items.Value -isnot [Array]) { throw ('GitHub pagination returned a malformed ' + $Property + ' page; state is unknown') }
+        foreach ($item in $items.Value) {
+            if ($item -isnot [pscustomobject]) { throw 'GitHub pagination returned a malformed item; state is unknown' }
+            $item
+        }
+    }
+}
+
 function Assert-ReleaseDraftVisibility {
     param([string]$Repository, [string]$Tag)
     # A Contents-write installation token can report permissions.push false.
@@ -118,6 +135,18 @@ function Get-ReleaseRemote {
         }
         $release
     }
+}
+
+function Wait-ReleaseCreatedDraft {
+    param([string]$Repository, [string]$Tag)
+    # Creation was already confirmed. Retry only missing readback, never create
+    # again; a read error or conflicting identity still fails immediately.
+    for ($attempt = 0; $attempt -lt 8; $attempt++) {
+        $release = Get-ReleaseRemote $Repository $Tag
+        if ($null -ne $release) { return $release }
+        if ($attempt -lt 7) { Start-Sleep -Milliseconds 1000 }
+    }
+    throw 'Created draft is not visible; retain original artifacts and rerun the original failed staging job'
 }
 
 function Assert-ReleaseImmutableSettings {

@@ -130,8 +130,10 @@ try {
             $notes = $checkout.notes + "`n`nUnsigned Windows MSVC binaries. See the candidate and validation manifests for archive identities and actual acceptance records.`n"
             foreach ($target in @('x86_64-pc-windows-msvc', 'aarch64-pc-windows-msvc')) { $notes += "`n- [$target](https://github.com/$Repository/releases/download/$Tag/regqry-$Tag-$target.zip)" }
             [IO.File]::WriteAllText($notesPath, $notes + "`n", [Text.UTF8Encoding]::new($false))
-            if (-not $remote) { Invoke-ReleaseGh @('release', 'create', $Tag, '--repo', $Repository, '--verify-tag', '--draft', '--title', ('RegQry ' + $checkout.version), '--notes-file', $notesPath) | Out-Null }
-            $remote = Get-ReleaseRemote $Repository $Tag
+            if (-not $remote) {
+                Invoke-ReleaseGh @('release', 'create', $Tag, '--repo', $Repository, '--verify-tag', '--draft', '--title', ('RegQry ' + $checkout.version), '--notes-file', $notesPath) | Out-Null
+                $remote = Wait-ReleaseCreatedDraft $Repository $Tag
+            } else { $remote = Get-ReleaseRemote $Repository $Tag }
             if (-not $remote.draft) { throw 'Only the original draft can be frozen' }
             $candidate.releaseId = $remote.id
             $candidate.assets = @(foreach ($path in $localAssets) { Sync-ReleaseAsset $Repository $Tag $path })
