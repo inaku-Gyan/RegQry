@@ -16,3 +16,5 @@ The intended release channels are two Windows ZIP downloads and `cargo install r
 For development, install Rust 1.100.0 with rustfmt and Clippy, the native MSVC C++ build tools, and a Windows SDK. See [CONTRIBUTING](https://github.com/inaku-Gyan/RegQry/blob/main/CONTRIBUTING.md), [testing](docs/testing.md), and [architecture](docs/architecture.md).
 
 Licensed under the [MIT License](LICENSE).
+
+Windows ZIPs also carry [third-party distribution materials](docs/distribution.md), including the notices for their actual Cargo graph and the pinned Rust standard library. Development asset construction does not establish a published or accepted release.

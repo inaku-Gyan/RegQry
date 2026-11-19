@@ -3,7 +3,8 @@ param(
     [Parameter(Mandatory)][string]$BundleArchive,
     [ValidatePattern('^[a-fA-F0-9]{64}$')][string]$ExpectedArchiveSha256,
     [ValidatePattern('^[a-fA-F0-9]{64}$')][string]$ExpectedManifestSha256,
-    [string]$ReportDirectory
+    [string]$ReportDirectory,
+    [string]$PowerShell7
 )
 
 $ErrorActionPreference = 'Stop'
@@ -51,6 +52,7 @@ try {
     if (Get-Command cargo,rustc -ErrorAction SilentlyContinue) { throw 'Relocation check must run without Cargo/rustc on PATH' }
     $runnerArgs = @{ ReportDirectory = (Join-Path $reportRoot 'tests') }
     if ($ExpectedManifestSha256) { $runnerArgs.ExpectedManifestSha256 = $ExpectedManifestSha256 }
+    if ($PowerShell7) { $runnerArgs.PowerShell7 = $PowerShell7 }
     & (Join-Path $roots[0].FullName 'run-tests.ps1') @runnerArgs
     $ran = Get-Content -LiteralPath (Join-Path $reportRoot 'tests/result.json') -Raw -Encoding utf8 | ConvertFrom-Json
     if ($ran.status -ne 'pass' -or $ran.environment.cargoOnPath -or $ran.environment.rustcOnPath) { throw 'Relocated runner did not complete without build tools on PATH' }

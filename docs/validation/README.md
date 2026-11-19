@@ -20,6 +20,8 @@ Fixed deep/wide generation, the aggregate consumer and opt-in observation tools 
 
 Twelve actual readonly queries on the development machine are recorded in [development live observations](live-development-2026-11-19.md). All were incomplete, with recorded exit 2; no raw registry contents were retained.
 
+Native user/test ZIP construction and original third-party notices are recorded in [release asset tooling checks](release-assets-2026-11-19.md). These are development assets; formal acceptance and publication remain pending.
+
 | Requirement | Current status |
 | --- | --- |
 | Native x64 and ARM64 hosted checks | Workflow implemented; remote execution pending |
@@ -31,6 +33,7 @@ Twelve actual readonly queries on the development machine are recorded in [devel
 | Actual CLI Ctrl+C, closed pipeline and fixed generated streaming baseline | VM case implemented, not run; isolated constructed-producer control probe passed locally |
 | Deep/wide scaling and representative live-query baselines | Generator/private-hive readback and consumer checked; twelve aggregate-only development live observations recorded, all incomplete; actual CLI VM/formal series not run |
 | Portable candidate test bundles and DLL checks | Development builder, x64 DLL checks and relocated tests passed; frozen candidates, ARM64 and clean minimum systems pending |
+| Production/test distribution materials and user ZIPs | Implemented; both Windows dependency graphs checked; local native x64 asset checks passed; native ARM64 execution and final distribution review pending |
 | Candidate source/ZIP hashes and repeatable Cargo archive | Release implementation pending |
 | First local crates.io initialization, Trusted Publisher, registry installs and immutable release | Release implementation pending |
 

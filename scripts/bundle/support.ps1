@@ -18,6 +18,71 @@ function Restore-BundleEnvironment {
     }
 }
 
+function Write-BundleArchive {
+    param([string]$Root, [string]$Archive)
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    Add-Type -AssemblyName System.IO.Compression
+    if (Test-Path -LiteralPath $Archive) { throw 'Archives are never overwritten' }
+    $archiveFile = [IO.Compression.ZipFile]::Open($Archive, [IO.Compression.ZipArchiveMode]::Create)
+    try {
+        foreach ($item in Get-ChildItem -LiteralPath $Root -Recurse -File | Sort-Object FullName) {
+            if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Archive inputs must be regular files' }
+            $entry = (Split-Path -Leaf $Root) + '/' + $item.FullName.Substring($Root.Length + 1).Replace('\', '/')
+            [IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archiveFile, $item.FullName, $entry, [IO.Compression.CompressionLevel]::Optimal) | Out-Null
+        }
+    } finally { $archiveFile.Dispose() }
+}
+
+function Read-BundleZipManifest {
+    param([string]$Archive, [string]$Entry, [string]$ExpectedSha256)
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $zip = [IO.Compression.ZipFile]::OpenRead($Archive)
+    try {
+        $entries = @($zip.Entries | Where-Object FullName -ceq $Entry)
+        if ($entries.Count -ne 1) { throw 'Archive has no unique expected bundle manifest' }
+        $stream = $entries[0].Open()
+        $memory = [IO.MemoryStream]::new()
+        try { $stream.CopyTo($memory); $bytes = $memory.ToArray() }
+        finally { $stream.Dispose(); $memory.Dispose() }
+        $sha = [Security.Cryptography.SHA256]::Create()
+        try { $actual = [BitConverter]::ToString($sha.ComputeHash($bytes)).Replace('-', '').ToLowerInvariant() }
+        finally { $sha.Dispose() }
+        if ($actual -cne $ExpectedSha256) { throw 'Archive manifest differs from the expected identity' }
+        [Text.UTF8Encoding]::new($false, $true).GetString($bytes) | ConvertFrom-Json
+    } finally { $zip.Dispose() }
+}
+
+function Assert-BundleLicenseMaterials {
+    param([string]$Root, [string]$Scope, [string]$Target, [string]$LockSha256)
+    $path = Join-Path $Root 'licenses/materials.json'
+    $materials = Get-Content -LiteralPath $path -Raw -Encoding utf8 | ConvertFrom-Json
+    if ($materials.schemaVersion -ne 1 -or $materials.status -cne 'pass' -or $materials.scope -cne $Scope -or $materials.target -cne $Target -or $materials.lockSha256 -cne $LockSha256 -or $materials.tool -cne 'cargo-about 0.9.3') {
+        throw 'Distribution license materials differ from the bundle inputs or scope'
+    }
+    if (@($materials.cargoPackages).Count -eq 0) { throw 'Distribution license graph is empty' }
+    $declared = @{}
+    foreach ($file in $materials.files) {
+        if ($file.path -notmatch '^(THIRD-PARTY-NOTICES\.txt|licenses/[a-zA-Z0-9_./-]+)$' -or $file.path -match '(^|/)\.\.?(/|$)' -or $file.path -eq 'licenses/materials.json' -or $declared.ContainsKey($file.path)) {
+            throw 'Invalid or duplicate license file identity'
+        }
+        $declared[$file.path] = $true
+        $item = Get-Item -LiteralPath (Join-Path $Root $file.path)
+        if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $item.Length -ne $file.size -or (Get-FileHash -LiteralPath $item.FullName -Algorithm SHA256).Hash.ToLowerInvariant() -cne $file.sha256) {
+            throw ('Distribution license file differs: ' + $file.path)
+        }
+    }
+    foreach ($required in @('THIRD-PARTY-NOTICES.txt', 'licenses/DISTRIBUTION.md', 'licenses/rust/COPYRIGHT-library.html', 'licenses/rust/LICENSE-MIT', 'licenses/rust/LICENSE-APACHE')) {
+        if (-not $declared.ContainsKey($required)) { throw ('Missing required distribution material: ' + $required) }
+    }
+    foreach ($item in Get-ChildItem -LiteralPath (Join-Path $Root 'licenses') -Recurse -Force) {
+        if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'License materials must not contain reparse points' }
+        if (-not $item.PSIsContainer) {
+            $relative = $item.FullName.Substring($Root.Length + 1).Replace('\', '/')
+            if ($relative -ne 'licenses/materials.json' -and -not $declared.ContainsKey($relative)) { throw ('Undeclared distribution material: ' + $relative) }
+        }
+    }
+}
+
 function Invoke-BundleProcess {
     param([string]$Program, [string[]]$Arguments, [int]$TimeoutSeconds = 120)
     # All callers pass fixed harness switches, not shell command strings.

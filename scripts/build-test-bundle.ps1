@@ -3,7 +3,8 @@ param(
     [Parameter(Mandatory)][string]$SourceArchive,
     [string]$OutputDirectory,
     [ValidateSet('x86_64-pc-windows-msvc', 'aarch64-pc-windows-msvc')][string]$Target,
-    [string]$Dumpbin
+    [string]$Dumpbin,
+    [string]$CargoAbout
 )
 
 $ErrorActionPreference = 'Stop'
@@ -57,6 +58,7 @@ $result = [ordered]@{
     cargo = $cargoVersion
     rustFlags = @('-C', 'target-feature=+crt-static')
     buildRoot = $runRoot
+    sourceDirectory = $unpacked
     bundle = $null
     error = $null
 }
@@ -124,6 +126,11 @@ try {
     Copy-Item -LiteralPath (Join-Path $unpacked 'LICENSE') -Destination (Join-Path $bundleRoot 'LICENSE')
     Copy-Item -LiteralPath (Join-Path $unpacked 'docs/terminal-validation.md') -Destination (Join-Path $bundleRoot 'terminal-validation.md')
     Copy-Item -LiteralPath (Join-Path $unpacked 'docs/performance.md') -Destination (Join-Path $bundleRoot 'performance.md')
+    $materialRoot = Join-Path $outputRoot 'test-materials'
+    & (Join-Path $PSScriptRoot 'build-license-materials.ps1') -ManifestPath (Join-Path $unpacked 'Cargo.toml') -Scope tests -Target $Target -OutputDirectory $materialRoot -ReportDirectory (Join-Path $outputRoot 'test-license-report') -CargoAbout $CargoAbout
+    Copy-Item -LiteralPath (Join-Path $materialRoot 'THIRD-PARTY-NOTICES.txt') -Destination $bundleRoot
+    Copy-Item -LiteralPath (Join-Path $materialRoot 'licenses') -Destination $bundleRoot -Recurse
+    Assert-BundleLicenseMaterials -Root $bundleRoot -Scope tests -Target $Target -LockSha256 $result.source.lockSha256
     $executables = @(Get-ChildItem -LiteralPath $bundleRoot -Recurse -File -Filter '*.exe' | Sort-Object FullName | ForEach-Object FullName)
     & (Join-Path $PSScriptRoot 'check-pe.ps1') -Executable $executables -Target $Target -ReportDirectory (Join-Path $bundleRoot 'pe') -Dumpbin $Dumpbin
     Copy-Item -LiteralPath (Join-Path $bundleRoot 'pe/result.json') -Destination (Join-Path $bundleRoot 'dll-imports.json')
@@ -149,16 +156,8 @@ try {
         files = $files
     }
     Write-BundleJson -Value $manifest -Path (Join-Path $bundleRoot 'bundle-manifest.json')
-    Add-Type -AssemblyName System.IO.Compression.FileSystem
-    Add-Type -AssemblyName System.IO.Compression
     $zip = Join-Path $outputRoot ($bundleName + '.zip')
-    $archive = [IO.Compression.ZipFile]::Open($zip, [IO.Compression.ZipArchiveMode]::Create)
-    try {
-        foreach ($item in Get-ChildItem -LiteralPath $bundleRoot -Recurse -File | Sort-Object FullName) {
-            $entry = $bundleName + '/' + $item.FullName.Substring($bundleRoot.Length + 1).Replace('\', '/')
-            [IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, $item.FullName, $entry, [IO.Compression.CompressionLevel]::Optimal) | Out-Null
-        }
-    } finally { $archive.Dispose() }
+    Write-BundleArchive -Root $bundleRoot -Archive $zip
     $result.bundle = [ordered]@{
         directory = $bundleRoot
         archive = $zip

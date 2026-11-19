@@ -1,0 +1,30 @@
+# Distributed test executables also contain development dependencies.
+accepted = ["MIT", "Apache-2.0", "Unicode-3.0"]
+targets = ["x86_64-pc-windows-msvc", "aarch64-pc-windows-msvc"]
+ignore-dev-dependencies = false
+ignore-build-dependencies = false
+ignore-transitive-dependencies = false
+
+[windows-link.clarify]
+license = "MIT OR Apache-2.0"
+[[windows-link.clarify.files]]
+path = "license-mit"
+license = "MIT"
+checksum = "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
+
+[windows-sys.clarify]
+license = "MIT OR Apache-2.0"
+[[windows-sys.clarify.files]]
+path = "license-mit"
+license = "MIT"
+checksum = "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
+
+# difflib 0.4.0 omitted its license from the published archive. Fetch the
+# original, unchanged license at this immutable upstream commit and verify it.
+[difflib.clarify]
+license = "MIT"
+override-git-commit = "8748d65b8c631a244af70f9d9f0339b6e7e9d29c"
+[[difflib.clarify.git]]
+path = "LICENSE"
+license = "MIT"
+checksum = "6725d1437fc6c77301f2ff0e7d52914cf4f9509213e1078dc77d9356dbe6eac5"

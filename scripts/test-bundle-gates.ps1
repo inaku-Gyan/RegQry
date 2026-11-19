@@ -31,7 +31,7 @@ $result = [ordered]@{
 }
 $savedBin = $env:REGQRY_TEST_BIN
 try {
-    foreach ($case in @('manifest-hash', 'changed-cli', 'missing-payload', 'extra-executable', 'missing-test-inventory', 'failed-pe-check')) {
+    foreach ($case in @('manifest-hash', 'changed-cli', 'missing-payload', 'extra-executable', 'missing-test-inventory', 'failed-pe-check', 'wrong-license-scope', 'empty-license-graph', 'missing-license-notices')) {
         $copy = Join-Path $copies $case
         Copy-Item -LiteralPath $bundleRoot -Destination $copy -Recurse
         $copyManifestPath = Join-Path $copy 'bundle-manifest.json'
@@ -70,6 +70,24 @@ try {
                 $file.size = (Get-Item -LiteralPath $pePath).Length
                 Write-BundleJson -Value $copyManifest -Path $copyManifestPath
                 'no successful matching PE check'
+            }
+            { $_ -in @('wrong-license-scope', 'empty-license-graph') } {
+                $path = Join-Path $copy 'licenses/materials.json'
+                $materials = Get-Content -LiteralPath $path -Raw -Encoding utf8 | ConvertFrom-Json
+                if ($case -eq 'wrong-license-scope') { $materials.scope = 'production' }
+                else { $materials.cargoPackages = @() }
+                Write-BundleJson -Value $materials -Path $path
+                $file = @($copyManifest.files | Where-Object path -eq 'licenses/materials.json')[0]
+                $file.sha256 = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+                $file.size = (Get-Item -LiteralPath $path).Length
+                Write-BundleJson -Value $copyManifest -Path $copyManifestPath
+                if ($case -eq 'wrong-license-scope') { 'license materials differ' } else { 'license graph is empty' }
+            }
+            'missing-license-notices' {
+                Remove-Item -LiteralPath (Join-Path $copy 'THIRD-PARTY-NOTICES.txt')
+                $copyManifest.files = @($copyManifest.files | Where-Object path -ne 'THIRD-PARTY-NOTICES.txt')
+                Write-BundleJson -Value $copyManifest -Path $copyManifestPath
+                'Missing required bundle file: THIRD-PARTY-NOTICES.txt'
             }
         }
         $env:REGQRY_TEST_BIN = 'parent-environment-must-survive'

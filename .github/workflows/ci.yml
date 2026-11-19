@@ -43,7 +43,7 @@ jobs:
           persist-credentials: false
       - name: Install pinned native Rust
         run: |
-          rustup toolchain install $env:RUSTUP_TOOLCHAIN --profile minimal --component clippy --component rustfmt
+          rustup toolchain install $env:RUSTUP_TOOLCHAIN --profile minimal --component clippy --component rustfmt --component rust-docs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Format
         if: matrix.target == 'x86_64-pc-windows-msvc'
@@ -56,7 +56,14 @@ jobs:
           ./scripts/check.ps1 -Check test -ExpectedHost '${{ matrix.target }}'
       - name: Package and independent source installation
         run: ./scripts/check.ps1 -Check package -ExpectedHost '${{ matrix.target }}'
-      - name: Build and relocate native static-CRT test bundle
+      - name: Install pinned license collector
+        run: |
+          $version = (Import-PowerShellDataFile ./scripts/tools.psd1).CargoAbout
+          $toolRoot = Join-Path $env:RUNNER_TEMP 'regqry-license-tools'
+          cargo install --version $version --locked --root $toolRoot cargo-about
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          (Join-Path $toolRoot 'bin') | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - name: Build and relocate native user and test assets
         run: |
           $env:REGQRY_TEST_PWSH = Join-Path $PSHOME 'pwsh.exe'
           $metadataText = cargo metadata --locked --no-deps --format-version 1
@@ -64,12 +71,13 @@ jobs:
           $metadata = $metadataText | ConvertFrom-Json
           $package = @($metadata.packages | Where-Object name -eq 'regqry')[0]
           $source = Join-Path $metadata.target_directory ('package/regqry-' + $package.version + '.crate')
-          ./scripts/build-test-bundle.ps1 -SourceArchive $source -OutputDirectory artifacts/portable-tests -Target '${{ matrix.target }}'
-          $built = Get-Content artifacts/portable-tests/build.json -Raw -Encoding utf8 | ConvertFrom-Json
-          ./scripts/check-test-bundle.ps1 -BundleArchive $built.bundle.archive -ExpectedArchiveSha256 $built.bundle.sha256 -ExpectedManifestSha256 $built.bundle.manifestSha256 -ReportDirectory artifacts/portable-test-check
-          ./scripts/test-bundle-gates.ps1 -BundleDirectory $built.bundle.directory -BundleArchive $built.bundle.archive -ReportDirectory artifacts/portable-test-gates
-          ./scripts/test-vm-gates.ps1 -BundleDirectory $built.bundle.directory -ReportDirectory artifacts/vm-test-gates
-          ./scripts/test-performance-gates.ps1 -BundleDirectory $built.bundle.directory -ReportDirectory artifacts/performance-test-gates
+          ./scripts/build-release-assets.ps1 -SourceArchive $source -OutputDirectory artifacts/native-assets -Target '${{ matrix.target }}'
+          $assets = Get-Content artifacts/native-assets/build.json -Raw -Encoding utf8 | ConvertFrom-Json
+          ./scripts/check-release-assets.ps1 -BuildReport artifacts/native-assets/build.json -ReportDirectory artifacts/native-asset-check -PowerShell7 (Join-Path $PSHOME 'pwsh.exe')
+          ./scripts/test-release-asset-gates.ps1 -BuildReport artifacts/native-assets/build.json -ReportDirectory artifacts/native-asset-gates
+          ./scripts/test-bundle-gates.ps1 -BundleDirectory $assets.tests.directory -BundleArchive $assets.tests.archive -ReportDirectory artifacts/portable-test-gates
+          ./scripts/test-vm-gates.ps1 -BundleDirectory $assets.tests.directory -ReportDirectory artifacts/vm-test-gates
+          ./scripts/test-performance-gates.ps1 -BundleDirectory $assets.tests.directory -ReportDirectory artifacts/performance-test-gates
       - name: Preserve package-check records
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -77,16 +85,22 @@ jobs:
           name: package-check-${{ matrix.target }}
           path: artifacts/package-check/**/result.json
           if-no-files-found: warn
-      - name: Preserve portable tests and relocation records
+      - name: Preserve native assets and development check records
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: portable-tests-${{ matrix.target }}
+          name: native-assets-${{ matrix.target }}
           path: |
-            artifacts/portable-tests/*.zip
-            artifacts/portable-tests/build.json
-            artifacts/portable-tests/*.jsonl
-            artifacts/portable-test-check/**
+            artifacts/native-assets/*.zip
+            artifacts/native-assets/*.crate
+            artifacts/native-assets/build.json
+            artifacts/native-assets/user-license-report/**
+            artifacts/native-assets/tests/*.zip
+            artifacts/native-assets/tests/build.json
+            artifacts/native-assets/tests/*.jsonl
+            artifacts/native-assets/tests/test-license-report/**
+            artifacts/native-asset-check/**
+            artifacts/native-asset-gates/**
             artifacts/portable-test-gates/**
             artifacts/vm-test-gates/**
             artifacts/performance-test-gates/**

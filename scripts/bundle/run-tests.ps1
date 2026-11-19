@@ -61,9 +61,10 @@ try {
             if ($relative -ne 'bundle-manifest.json' -and -not $declared.ContainsKey($relative)) { throw ('Undeclared bundle file: ' + $relative) }
         }
     }
-    foreach ($required in @('regqry.exe', 'run-tests.ps1', 'support.ps1', 'dll-imports.json', 'LICENSE')) {
+    foreach ($required in @('regqry.exe', 'run-tests.ps1', 'support.ps1', 'dll-imports.json', 'LICENSE', 'THIRD-PARTY-NOTICES.txt', 'licenses/materials.json')) {
         if (-not $declared.ContainsKey($required)) { throw ('Missing required bundle file: ' + $required) }
     }
+    Assert-BundleLicenseMaterials -Root $bundleRoot -Scope tests -Target $manifest.target -LockSha256 $manifest.source.lockSha256
     $pe = Get-Content -LiteralPath (Join-Path $bundleRoot 'dll-imports.json') -Raw -Encoding utf8 | ConvertFrom-Json
     if ($pe.schemaVersion -ne 1 -or $pe.status -ne 'pass' -or $pe.target -ne $manifest.target) { throw 'Bundle has no successful matching PE check' }
     $checkedExecutables = @{}

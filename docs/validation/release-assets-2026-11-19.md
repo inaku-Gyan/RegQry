@@ -1,0 +1,24 @@
+# Release asset tooling checks, 2026-11-19
+
+Implementation branch: `build/release-assets`, based on `b3bf91573ac13c008f31ddeb57fff92cfe703d80`. This record covers development asset tooling. It is not a frozen candidate, native ARM64 run, minimum/clean-system acceptance or publication record. See [asset construction](../releasing.md).
+
+Implemented:
+
+- Fixed cargo-about 0.9.3 production/test configurations and a plain-text template. Generation uses the extracted Cargo manifest/lock with explicit Windows target filtering, checks coverage against Cargo's normal/build or normal/build/dev graph, retains original license texts and supplementary packaged notices, and includes the actual Rust 1.100.0 standard-library copyright/license files.
+- Hash-checked clarifications for windows-sys/windows-link's lowercase `license-mit` files preserve Microsoft's original copyright. difflib 0.4.0 omitted LICENSE from its archive; the test graph retrieves its original immutable upstream file and checks SHA-256. Generic fallback text without a source is rejected. This uses cargo-about's resolver rather than implementing a license parser.
+- Native user/test ZIPs from the actual source archive, with one shared production executable, explicit static CRT, PE checks, complete file/material identities, source archive/normalized file identities, compiler/linkage settings and actual native environment. No existing ZIP is overwritten.
+- User ZIP namespace/inventory/production-material checks, documentation link closure, pre-execution user/test CLI identity comparison, Unicode/space relocation and help/version without Cargo on PATH. The actual test archive is independently relocated and verified.
+- Thirteen user asset rejection probes and three additional portable license probes. Wrong hashes, missing/wrong-scope/empty/altered materials, absent Rust notices, broken docs, unsafe/colliding ZIP paths and mismatched CLI identities fail before payload execution. CI now constructs/checks native user/test assets and preserves them as temporary artifacts on both hosted targets; remote execution remains pending.
+
+Executed development probes:
+
+- Both target-filtered graphs generated successfully: production **28 Cargo packages / 66 material files**, tests **40 packages / 88 files**, for each of x64 and ARM64. This is graph filtering on an x64 host, not ARM64 executable execution. Reports are `artifacts/license-reports/*/result.json`; configuration and source/lock/tool hashes are recorded.
+- A dirty-checkout source package with 35 files passed normal Cargo verification and independent outside-Git installation/help/version. The first x64 static-CRT user/test asset build from that archive passed all five PE checks, license collection, archive identity and local documentation checks.
+- The first relocated archive run passed **47 ordinary tests**, leaving **8 opt-in cases ignored**. The initial 10 user rejection probes and 12 portable rejection probes passed in PowerShell 7.7.0. The expanded 13 user rejection probes and 17-file syntax parse passed in actual Windows PowerShell 5.1.26100.9818. Probe records live under `artifacts/assets-probe*`; these dirty probes are distinct from subsequent clean-commit archives.
+- actionlint 1.7.12 and whitespace checks passed. The actionlint invocation retains the existing explicit exception for its missing `windows-11-vs2026-arm` label catalog entry; no workflow errors were otherwise ignored.
+
+The host is a native x64 development Windows client 10.0.26300, with non-elevated token recorded by the runners. Removing Cargo/rustc from PATH does not establish that developer tools or runtimes are absent from the system. Tests write private application-hive/temp fixtures only; these asset checks do not query the user's existing registry or create global VM fixtures. The prior aggregate-only live observations were not rerun.
+
+Production Rust code, dependency versions/features and Cargo.lock are unchanged. The lock remains SHA-256 `4302706560ffc6a88cc84ff6e1850f16ff5abc906e1b87dfb540606d86caccfd`. The earlier same-day online dependency audit still binds that graph; no new audit run is claimed by license collection. cargo-about does not replace the dependency audit or the additional native/runtime/asset review described in [distribution materials](../distribution.md).
+
+Clean-commit archive identities and their subsequent exact-byte PowerShell runs are retained separately in structured build/check reports and the implementation handoff; this avoids embedding an archive's own future commit/hash inside its input. Missing formal VM/native ARM64/minimum/clean-client/shell/visual records remain release blockers. Candidate freezing, evidence validation, OIDC/bootstrap, actual registry installs, immutable release settings and remote recovery/publication are not implemented or exercised by this phase. No push, PR, merge, tag or public release was made.
