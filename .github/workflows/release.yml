@@ -1,387 +1,42 @@
-name: Release permission diagnostic
+name: Release draft readback diagnostic
 
 on:
-  push:
-    tags: ['v*']
   workflow_dispatch:
 
 permissions:
-  contents: read
-
-concurrency:
-  group: release-${{ github.ref }}
-  cancel-in-progress: false
+  contents: write
 
 env:
-  RELEASE_TAG: ${{ github.ref_name }}
   GH_TOKEN: ${{ github.token }}
-  CARGO_TERM_COLOR: never
-  CARGO_BUILD_WARNINGS: deny
-  RUSTUP_TOOLCHAIN: 1.100.0
-
-defaults:
-  run:
-    shell: pwsh
 
 jobs:
-  visibility-write:
+  draft-readback:
     runs-on: ubuntu-24.04
-    permissions:
-      contents: write
     steps:
-      - name: Observe installation-token fields and generate notes without saving a release
+      - name: Observe existing draft through list, ID, tag, CLI and GraphQL
         shell: bash
         run: |
           mkdir proof
-          gh api "repos/$GITHUB_REPOSITORY" --jq '{id,full_name,default_branch,permissions}' > proof/repository.json
-          gh api "repos/$GITHUB_REPOSITORY/releases" --jq '[.[]|{id,tag_name,draft}]' > proof/before.json
-          printf '%s\n' '{"tag_name":"v0.1.0"}' > proof/notes-request.json
+          gh api "repos/$GITHUB_REPOSITORY" --jq '{id,full_name,permissions}' > proof/repository.json
           set +e
-          gh api --method POST "repos/$GITHUB_REPOSITORY/releases/generate-notes" --include --input proof/notes-request.json > proof/response.txt 2> proof/stderr.txt
-          status=$?
+          gh api "repos/$GITHUB_REPOSITORY/releases" --jq '[.[]|{id,tag_name,draft}]' > proof/list.json 2> proof/list.stderr.txt
+          printf '%s\n' "$?" > proof/list.exit.txt
+          gh api "repos/$GITHUB_REPOSITORY/releases/451946069" --jq '{id,tag_name,draft}' > proof/id.json 2> proof/id.stderr.txt
+          printf '%s\n' "$?" > proof/id.exit.txt
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/v0.1.1" --jq '{id,tag_name,draft}' > proof/tag.json 2> proof/tag.stderr.txt
+          printf '%s\n' "$?" > proof/tag.exit.txt
+          gh release view v0.1.1 --repo "$GITHUB_REPOSITORY" --json id,isDraft,tagName > proof/cli.json 2> proof/cli.stderr.txt
+          printf '%s\n' "$?" > proof/cli.exit.txt
+          gh api graphql -f 'query=query {repository(owner:"inaku-Gyan",name:"RegQry"){release(tagName:"v0.1.1"){databaseId tagName isDraft}}}' > proof/graphql.json 2> proof/graphql.stderr.txt
+          printf '%s\n' "$?" > proof/graphql.exit.txt
           set -e
-          printf '%s\n' "$status" > proof/exit.txt
-          gh api "repos/$GITHUB_REPOSITORY/releases" --jq '[.[]|{id,tag_name,draft}]' > proof/after.json
-          diff -u proof/before.json proof/after.json
-          cat proof/repository.json proof/response.txt
-          test "$status" -eq 0
-          grep -E '^HTTP/[0-9.]+ 200' proof/response.txt
+          for route in list id tag cli graphql; do
+            printf '\n%s: exit ' "$route"
+            cat "proof/$route.exit.txt" "proof/$route.json" "proof/$route.stderr.txt"
+          done
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
-          name: visibility-write
+          name: draft-readback
           path: proof/**
           if-no-files-found: error
-
-  visibility-read:
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-    steps:
-      - name: Negative control with a read-only installation token
-        shell: bash
-        run: |
-          mkdir proof
-          gh api "repos/$GITHUB_REPOSITORY" --jq '{id,full_name,default_branch,permissions}' > proof/repository.json
-          gh api "repos/$GITHUB_REPOSITORY/releases" --jq '[.[]|{id,tag_name,draft}]' > proof/before.json
-          printf '%s\n' '{"tag_name":"v0.1.0"}' > proof/notes-request.json
-          set +e
-          gh api --method POST "repos/$GITHUB_REPOSITORY/releases/generate-notes" --include --input proof/notes-request.json > proof/response.txt 2> proof/stderr.txt
-          status=$?
-          set -e
-          printf '%s\n' "$status" > proof/exit.txt
-          gh api "repos/$GITHUB_REPOSITORY/releases" --jq '[.[]|{id,tag_name,draft}]' > proof/after.json
-          diff -u proof/before.json proof/after.json
-          cat proof/repository.json proof/response.txt
-          test "$status" -ne 0
-          grep -E '^HTTP/[0-9.]+ 403' proof/response.txt
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: always()
-        with:
-          name: visibility-read
-          path: proof/**
-          if-no-files-found: error
-
-  inspect:
-    if: github.event_name == 'push' && github.ref_type == 'tag'
-    runs-on: windows-2025-vs2026
-    # Draft listing requires push visibility. This job only observes state; a
-    # filtered read-only listing must never be mistaken for absence of a draft.
-    permissions:
-      contents: write
-    outputs:
-      state: ${{ steps.inspect.outputs.state }}
-      version: ${{ steps.inspect.outputs.version }}
-      commit: ${{ steps.inspect.outputs.commit }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - name: Install fixed Rust
-        run: |
-          rustup toolchain install 1.100.0 --profile minimal
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Inspect actual tag and remote candidate before any build
-        id: inspect
-        run: ./scripts/release.ps1 -Action Inspect -Tag $env:RELEASE_TAG -OutputDirectory artifacts/release-inspect
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: always()
-        with:
-          name: release-inspect
-          path: artifacts/release-inspect/result.json
-          if-no-files-found: warn
-
-  quality:
-    needs: inspect
-    permissions:
-      contents: read
-      actions: read
-    uses: ./.github/workflows/ci.yml
-    with:
-      skip_native: ${{ needs.inspect.outputs.state != 'fresh' }}
-      skip_hosted: true
-
-  source:
-    needs: [inspect, quality]
-    if: needs.inspect.outputs.state == 'fresh'
-    runs-on: windows-2025-vs2026
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - name: Install fixed Rust
-        run: |
-          rustup toolchain install 1.100.0 --profile minimal
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Preserve one verified x64 Cargo archive for both native builds
-        run: ./scripts/release.ps1 -Action Source -Tag $env:RELEASE_TAG -OutputDirectory artifacts/release-source
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: release-source
-          path: artifacts/release-source/*.crate
-          if-no-files-found: error
-
-  native:
-    needs: [inspect, source]
-    if: needs.inspect.outputs.state == 'fresh'
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runner: windows-2025-vs2026
-            target: x86_64-pc-windows-msvc
-          - runner: windows-11-vs2026-arm
-            target: aarch64-pc-windows-msvc
-    runs-on: ${{ matrix.runner }}
-    env:
-      RUSTUP_TOOLCHAIN: 1.100.0-${{ matrix.target }}
-      RELEASE_TARGET: ${{ matrix.target }}
-      RELEASE_VERSION: ${{ needs.inspect.outputs.version }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: release-source
-          path: artifacts/source
-          digest-mismatch: error
-      - name: Install native compiler, documentation and license collector
-        run: |
-          rustup toolchain install $env:RUSTUP_TOOLCHAIN --profile minimal --component rust-docs
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $version = (Import-PowerShellDataFile ./scripts/tools.psd1).CargoAbout
-          $toolRoot = Join-Path $env:RUNNER_TEMP 'regqry-license-tools'
-          cargo install --version $version --locked --features cli --root $toolRoot cargo-about
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $installedVersion = & (Join-Path $toolRoot 'bin/cargo-about.exe') --version
-          if ($LASTEXITCODE -ne 0 -or $installedVersion -cne ('cargo-about ' + $version)) { throw 'Pinned cargo-about installation failed' }
-          (Join-Path $toolRoot 'bin') | Out-File $env:GITHUB_PATH -Encoding utf8 -Append
-      - name: Build exact user/test assets with recorded MSVC and SDK
-        run: |
-          $source = 'artifacts/source/regqry-' + $env:RELEASE_VERSION + '.crate'
-          ./scripts/build-release-candidate.ps1 -SourceArchive $source -OutputDirectory artifacts/candidate -Target $env:RELEASE_TARGET
-          ./scripts/check-release-assets.ps1 -BuildReport artifacts/candidate/build.json -ReportDirectory artifacts/candidate/check -PowerShell7 (Join-Path $PSHOME 'pwsh.exe')
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: candidate-${{ matrix.target }}
-          path: |
-            artifacts/candidate/*.crate
-            artifacts/candidate/*.zip
-            artifacts/candidate/build.json
-            artifacts/candidate/tests/*.zip
-            artifacts/candidate/tests/build.json
-            artifacts/candidate/tests/*.jsonl
-            artifacts/candidate/tests/test-license-report/**
-            artifacts/candidate/user-license-report/**
-            artifacts/candidate/check/**
-          if-no-files-found: error
-
-  freeze:
-    needs: [inspect, native]
-    if: needs.inspect.outputs.state == 'fresh'
-    runs-on: windows-2025-vs2026
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: candidate-x86_64-pc-windows-msvc
-          path: artifacts/candidates/x86_64-pc-windows-msvc
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: candidate-aarch64-pc-windows-msvc
-          path: artifacts/candidates/aarch64-pc-windows-msvc
-      - name: Install fixed Rust
-        run: |
-          rustup toolchain install 1.100.0 --profile minimal
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Freeze the draft using original uploaded/downloaded byte identities
-        run: ./scripts/release.ps1 -Action Freeze -Tag $env:RELEASE_TAG -InputDirectory artifacts/candidates -OutputDirectory artifacts/release-freeze
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: always()
-        with:
-          name: release-freeze
-          path: artifacts/release-freeze/**
-          if-no-files-found: warn
-
-  acceptance-inputs:
-    needs: [inspect, quality, freeze]
-    if: >-
-      always() && needs.quality.result == 'success' &&
-      (needs.freeze.result == 'success' || needs.inspect.outputs.state == 'frozen' || needs.inspect.outputs.state == 'published')
-    runs-on: windows-2025-vs2026
-    outputs:
-      candidate_id: ${{ steps.inputs.outputs.candidate_id }}
-      source_state: ${{ steps.inputs.outputs.source_state }}
-      source_sha256: ${{ steps.inputs.outputs.source_sha256 }}
-      registry_state: ${{ steps.inputs.outputs.registry_state }}
-    permissions:
-      contents: write
-      actions: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - name: Install fixed Rust
-        run: |
-          rustup toolchain install 1.100.0 --profile minimal
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Restore original frozen inputs and discover accepted evidence
-        id: inputs
-        run: ./scripts/release.ps1 -Action AcceptanceInputs -Tag $env:RELEASE_TAG -OutputDirectory artifacts/acceptance-inputs
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: release-acceptance-inputs
-          path: artifacts/acceptance-inputs/inputs/**
-          if-no-files-found: error
-
-  source-acceptance:
-    needs: acceptance-inputs
-    if: needs.acceptance-inputs.outputs.source_state == 'missing'
-    permissions:
-      contents: write
-      actions: read
-    uses: ./.github/workflows/acceptance.yml
-    with:
-      stage: source
-      candidate_id: ${{ needs.acceptance-inputs.outputs.candidate_id }}
-
-  cargo:
-    needs: [inspect, acceptance-inputs, source-acceptance]
-    if: >-
-      always() && needs.acceptance-inputs.result == 'success' && needs.inspect.outputs.state != 'published' &&
-      (needs.acceptance-inputs.outputs.source_state == 'accepted' || needs.source-acceptance.result == 'success')
-    runs-on: windows-2025-vs2026
-    environment: release
-    permissions:
-      contents: write
-      actions: read
-      id-token: write
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - name: Install fixed Rust
-        run: |
-          rustup toolchain install 1.100.0 --profile minimal
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Validate original hosted source acceptance and inspect exact registry state
-        run: ./scripts/release.ps1 -Action CargoStatus -Tag $env:RELEASE_TAG -OutputDirectory artifacts/release-cargo-state
-      - name: Strict repeated Cargo archive check before requesting credentials
-        run: ./scripts/release.ps1 -Action CargoPreflight -Tag $env:RELEASE_TAG -OutputDirectory artifacts/release-cargo-preflight
-      - name: Exchange OIDC identity (also verifies first local bootstrap binding)
-        id: auth
-        uses: rust-lang/crates-io-auth-action@3268eb413133e2960fa4ae0e963ca76380c54cd9 # v1.0.6; post revokes token
-      - name: Publish once or verify an already published exact version
-        id: publish-cargo
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
-          REGQRY_OIDC_AUTH: 'true'
-        run: ./scripts/release.ps1 -Action CargoPublish -Tag $env:RELEASE_TAG -OutputDirectory artifacts/release-cargo-publish
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: always()
-        with:
-          name: release-cargo-records
-          path: |
-            artifacts/release-cargo-state/*.json
-            artifacts/release-cargo-preflight/*.json
-            artifacts/release-cargo-preflight/*.txt
-            artifacts/release-cargo-publish/*.json
-            artifacts/release-cargo-publish/*.txt
-          if-no-files-found: warn
-
-  registry-acceptance:
-    needs: [cargo, acceptance-inputs, source-acceptance]
-    if: always() && needs.cargo.result == 'success' && needs.acceptance-inputs.outputs.registry_state == 'missing'
-    permissions:
-      contents: write
-      actions: read
-    uses: ./.github/workflows/acceptance.yml
-    with:
-      stage: registry
-      candidate_id: ${{ needs.acceptance-inputs.outputs.candidate_id }}
-      source_sha256: ${{ needs.acceptance-inputs.outputs.source_sha256 || needs.source-acceptance.outputs.sha256 }}
-
-  finalize:
-    needs: [cargo, acceptance-inputs, registry-acceptance]
-    if: >-
-      always() && needs.cargo.result == 'success' &&
-      (needs.acceptance-inputs.outputs.registry_state == 'accepted' || needs.registry-acceptance.result == 'success')
-    runs-on: windows-2025-vs2026
-    permissions:
-      contents: write
-      actions: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - name: Install fixed Rust
-        run: |
-          rustup toolchain install 1.100.0 --profile minimal
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Archive complete original evidence and stage final identities
-        run: ./scripts/release.ps1 -Action Finalize -Tag $env:RELEASE_TAG -OutputDirectory artifacts/release-finalize
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: always()
-        with:
-          name: release-finalize
-          path: artifacts/release-finalize/**
-          if-no-files-found: warn
-
-  publish:
-    needs: [inspect, quality, finalize]
-    if: >-
-      always() && needs.quality.result == 'success' &&
-      (needs.finalize.result == 'success' || needs.inspect.outputs.state == 'published')
-    runs-on: windows-2025-vs2026
-    environment: release
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - name: Install fixed Rust
-        run: |
-          rustup toolchain install 1.100.0 --profile minimal
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Download/verify every actual asset, then publish the same immutable draft
-        run: ./scripts/release.ps1 -Action Publish -Tag $env:RELEASE_TAG -OutputDirectory artifacts/release-publish
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: always()
-        with:
-          name: release-publish
-          path: artifacts/release-publish/result.json
-          if-no-files-found: warn
