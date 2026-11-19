@@ -12,6 +12,8 @@ For changes in progress, `./scripts/check.ps1 -AllowDirty` permits Cargo packagi
 
 Native CI also builds static-CRT user and test ZIPs from the Cargo archive, collects their production/test-specific license materials, checks PE imports, runs relocated assets without Cargo on PATH, and probes rejected file/inventory/architecture states. See [portable test commands](docs/testing.md) and [asset construction](docs/releasing.md). These hosted runs do not replace minimum-system or clean-system acceptance.
 
+Release-script changes also run `./scripts/test-release-gates.ps1 -ReportDirectory artifacts/release-gates`. This uses synthetic records and mocked remote command boundaries, including interrupted uploads/publication and evidence rejection. It performs no real release, credential exchange or global registry writes. Read [the release route](docs/releasing.md) and [evidence contract](docs/release-evidence.md) before changing those gates.
+
 The [real registry VM suite](docs/vm-testing.md) uses separate elevated setup and ordinary-user query phases. Its tests are ignored by default. CI checks the opt-in/identity guards without creating global fixtures; VM rollback/destruction remains a required external cleanup step.
 
 The checks use locked dependencies, rustfmt, default Clippy, and warnings as errors. Add narrowly scoped lint exceptions only with a reason. Necessary unsafe Windows calls must state their SAFETY invariants. Add tests for observable contracts and meaningful failure cases; there is no global coverage percentage requirement.

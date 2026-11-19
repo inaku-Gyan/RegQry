@@ -1,6 +1,6 @@
 # Release preparation and assets
 
-RegQry has not published a release. Native asset construction is implemented; tag orchestration, candidate freezing, formal evidence validation, crates.io bootstrap/OIDC publication, registry installation and immutable GitHub Release promotion remain pending. Do not treat a successful development asset build as authorization or evidence to publish.
+RegQry has not published a release. Native assets and the tag/draft/evidence/Cargo/OIDC/recovery workflow are implemented locally. Remote execution, formal acceptance and actual channel publication remain unverified. The immutable-settings read is a known publication blocker under the current GITHUB_TOKEN-only configuration; no GitHub App is used. Development asset or mocked-state checks do not establish a release.
 
 The agreed release route is a `vVERSION` tag on a reviewed commit already merged into `main`. `Cargo.toml` is the version source; Cargo.lock, CLI version, tag, changelog and assets must agree. A version preparation PR reviews the English changelog. Normal development uses ordinary merges. The initial version is 0.1.0; compatible additions and breaking changes increment the minor component during 0.x, fixes increment patch, and breaking changes are explicitly called out. Options, matching semantics, exit statuses and promised output behavior form the compatibility contract.
 
@@ -44,12 +44,49 @@ Rejection probes change only disposable copies. They cover archive/manifest/sour
 
 CI builds and checks these native assets on its two hosted architectures and preserves temporary Actions artifacts. A local x64 run does not establish that remote CI or native ARM64 ran. Neither a restricted PATH nor hosted execution establishes a clean minimum Windows client. Actual platform/VM/shell/terminal checks are listed in [testing](testing.md), [VM testing](vm-testing.md) and [the validation index](validation/README.md).
 
-## Remaining release chain
+## Tag workflow and frozen candidate
 
-The single planned `release.yml` uses tag push for normal releases and dispatch on that same existing tag only for recovery. It will reuse CI, build from one preserved x64 source archive on both native architectures, stage a GitHub draft, freeze candidate identities and validate the complete external evidence. Missing/failed evidence keeps the draft unpublished, with no separate human approval button. The required x64 Windows 10 22H2, stable x64 Windows 11 and native ARM64 Windows 11 24H2 resources are still missing.
+The single [release.yml](../.github/workflows/release.yml) uses tag push for normal releases and dispatch on that same existing tag only for recovery. `release.ps1 -Action Inspect` first verifies clean HEAD/tag, actual remote tag commit, ancestry in fetched origin/main, locked Cargo metadata and one dated `## [VERSION] - YYYY-MM-DD` changelog entry. The current Unreleased entry deliberately cannot pass release preparation. No command creates or moves a Git tag.
+
+Fresh runs reuse CI, preserve one verified x64 Cargo archive, then build on both native architectures. `build-release-candidate.ps1` selects the installed MSVC environment through vswhere/vcvarsall, pins Cargo's actual linker path, and records linker/Cargo binary hashes, selected SDK/UCRT versions and representative SDK import-library hashes. These identify actual selected tools, not only a dumpbin version. Existing package checks still validate the original source, static CRT, license materials and relocated assets.
+
+Freeze checks both ZIP manifests and complete source inventories before creating the draft, uploads/downloads the five core archives with no clobber, and finally attaches `candidate-manifest.json`. Its SHA-256 is the candidate ID. It contains original server asset IDs/names/sizes/hashes, both native build/check records, test inventories and original build/license/check log bytes. Draft recovery therefore does not require a build-machine path or an unexpired Actions artifact. Keep an independent copy of the original candidate and all archives as well.
+
+If staging fails before the candidate manifest exists, rerun the original failed staging job with its original build artifacts. A whole-run retry detects the partial draft and refuses a new build. Once frozen, recovery skips native asset construction and refreshes dependency checks. Missing/failed [formal evidence](release-evidence.md) keeps the draft unpublished; no separate approval button is added. The required x64 Windows 10 22H2, stable x64 Windows 11 and native ARM64 Windows 11 24H2 resources remain missing.
+
+## Evidence, Cargo and final promotion
+
+Supply a preserved acceptance ZIP using `evidence_url` and `evidence_sha256` on recovery, or the matching `RELEASE_EVIDENCE_URL` / `RELEASE_EVIDENCE_SHA256` repository variables before rerunning the failed jobs. These are data inputs, never release refs or code. The workflow sends no GitHub/Cargo credentials to that HTTPS host. Every file and required result is validated after the supplied archive digest and complete safe ZIP namespace are checked. Preserve the original archive outside expiring Actions storage until it is inside the final validation attachment.
+
+```powershell
+gh workflow run release.yml --ref v0.1.0 `
+  -f evidence_url=https://YOUR-HOST/accepted-original.zip `
+  -f evidence_sha256=THE_RECORDED_LOWERCASE_SHA256
+```
+
+Dispatch requires the actual existing tag ref and a frozen candidate. It cannot start a new release or regenerate ZIPs. Main must already contain the workflow definition. See the evidence guide for separate pre-Cargo source-archive acceptance and post-Cargo registry-install evidence; a missing latter record can leave Cargo public while GitHub remains a draft.
 
 The first new crates.io package is bootstrapped locally on Windows only after candidate acceptance. CI always uses official OIDC Trusted Publishing, with no API-token fallback. Release promotion publishes/verifies Cargo first, including the exact registry archive/index hash and both native registry installations, then makes the same GitHub draft public. Preflight repeated Cargo packaging and the actual uploaded registry archive must exactly match the frozen candidate SHA-256. A source-equivalent archive is insufficient.
 
+For the first real version, use the accepted candidate and clean tag on native x64 Windows, Rust/Cargo 1.100.0, and the standard local Cargo credential mechanism. Do not put the short-lived bootstrap credential in command arguments, repository files or CI. The script verifies the candidate's Cargo binary/compiler and repeated archive before publishing:
+
+```powershell
+./scripts/release.ps1 -Action CargoPublish -Tag v0.1.0 -LocalBootstrap `
+  -EvidenceDirectory C:/acceptance-v0.1.0 -OutputDirectory artifacts/local-bootstrap
+```
+
+After verifying the real registry bytes, bind crates.io Trusted Publishing to `inaku-Gyan/RegQry`, `release.yml`, environment `release`, then revoke the bootstrap token. CI uses the pinned official `rust-lang/crates-io-auth-action` and its automatic post-job revocation, even when verifying an already locally published version. Configure the release environment for `v*` tag refs without required reviewers. No first-publish token secret, PAT or alternate Cargo authentication path exists in CI.
+
+Registry inspection compares the exact-version API, sparse index checksum, actual downloaded archive and every original file. Disagreement, network failure or propagation is unknown, never permission to upload. Immediately before invoking Cargo, publication writes a candidate-bound attempt marker in the draft notes. A later run may verify a matching published version, but an absent version with an earlier attempt marker blocks automatic re-upload. Preserve the logs and reconcile the actual provider state; scripts never remove this marker or guess that an upload failed. An unresolved attempt can require abandoning the version.
+
+Each hosted native architecture installs the exact crates.io version with a fresh Cargo home/target/install root and checks the cached source checksum and installed version/help. These no-query hosted checks are distinct from the required ordinary-user/private-fixture registry installations on the three formal clients. Finalization waits for both sets. No global fixture runs on the hosted build runners.
+
 Frozen user/test ZIPs and notices are promoted byte for byte. The final asset set also contains `candidate-manifest.json`, `regqry-vVERSION-validation.zip`, `build-manifest.json` and `SHA256SUMS`, with no circular hash references. Durable evidence belongs to the draft/final release, not solely expiring Actions artifacts. Before public promotion the complete actual draft contents must be downloaded/verified, with immutable releases enabled and verified. SHA-256/release attestations do not replace Authenticode; executables are unsigned in the initial release.
 
-Recovery reads actual remote state first: same version/name and hash skips an already completed step, a missing asset can use the preserved original file, and any differing hash stops. It never overwrites assets, moves/reuses a published tag, rebuilds frozen ZIPs, or rolls back an already public channel. Cargo timeouts require querying the exact version before another upload; report partial publication explicitly. None of these remote publication/recovery paths has been implemented or exercised yet.
+The validation archive includes original external records, both native registry-install logs and embedded candidate build logs. It excludes build-manifest/SHA256SUMS; build-manifest excludes its own hash. Finalization retries reuse the original remote validation ZIP and build manifest, then fill only missing deterministic checksum material. `Publish` downloads the complete nine-asset set, checks inventories, current registry bytes and final evidence before promoting that same draft. A public-success/command-failure retry only verifies actual state.
+
+**Unresolved settings permission:** GitHub's [immutable settings API](https://docs.github.com/en/rest/repos/repos#check-if-immutable-releases-are-enabled-for-a-repository) requires Administration read. The workflow's GITHUB_TOKEN does not grant that permission. The user declined adding a GitHub App; no App action, key or PAT has been introduced. `Publish` currently fails closed when this live read is denied. Resolving this access/verification constraint remains necessary before automatic public promotion; a repository variable, stale snapshot or checkbox is not substituted for the live check. Repository immutable settings have not been changed by this implementation.
+
+Recovery reads actual remote state first: same version/name and hash skips an already completed step, a missing core draft asset can use `-Action Restore -InputDirectory ORIGINAL_CORE_FILES`, and any differing hash stops. Restore validates all five originals first, then re-uploads only missing attachments. A restored attachment gets a new server ID; its original candidate ID remains trace metadata and content identity must still match exactly. A missing original candidate manifest or unrecoverable bytes blocks automation rather than creating a new identity. Scripts never overwrite assets, move/reuse a published tag, rebuild frozen ZIPs, or roll back an already public channel.
+
+Run `./scripts/test-release-gates.ps1 -ReportDirectory artifacts/release-gates` for synthetic remote-state/evidence fault injection. It exercises the actual orchestration script with mocked remote/metadata boundaries and synthetic data, without real publication, credentials or global registry writes. Actual tag permissions, channel operations, recovery, OIDC and minimum/ARM clients still require remote rehearsal and acceptance.

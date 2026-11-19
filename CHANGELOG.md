@@ -16,6 +16,7 @@ User-facing changes are reviewed here before creating a release tag. This projec
 - Actual cmd/Windows PowerShell 5.1/PowerShell 7 invocation and encoding checks, with separate owned-VM query cases and a manual terminal acceptance record template.
 - Fixed deep/wide scaling fixtures and exact-result VM measurement, plus an explicit aggregate-only live-query observer with no retained registry contents.
 - Native user/test ZIP asset construction with production/test-specific cargo-about materials, original copyright texts, Rust standard-library notices and archive/relocation checks.
+- Tag-driven draft/candidate freezing, formal evidence validation, strict Cargo archive checks, OIDC-only CI publication, native registry installation and state-aware release recovery tooling; actual publication and platform acceptance remain pending.
 
 ### Fixed
 

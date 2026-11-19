@@ -6,6 +6,11 @@ on:
   push:
     branches: [main]
   workflow_call:
+    inputs:
+      skip_native:
+        description: Recovery refreshes advisories without rebuilding frozen assets
+        type: boolean
+        default: false
   workflow_dispatch:
   schedule:
     - cron: '13 3 * * 1'
@@ -19,7 +24,7 @@ concurrency:
 
 jobs:
   native:
-    if: github.event_name != 'schedule'
+    if: github.event_name != 'schedule' && !inputs.skip_native
     name: Native ${{ matrix.target }}
     strategy:
       fail-fast: false
@@ -56,6 +61,9 @@ jobs:
           ./scripts/check.ps1 -Check test -ExpectedHost '${{ matrix.target }}'
       - name: Package and independent source installation
         run: ./scripts/check.ps1 -Check package -ExpectedHost '${{ matrix.target }}'
+      - name: Release state and evidence rejection model (no external writes)
+        if: matrix.target == 'x86_64-pc-windows-msvc'
+        run: ./scripts/test-release-gates.ps1 -ReportDirectory artifacts/release-gates
       - name: Install pinned license collector
         run: |
           $version = (Import-PowerShellDataFile ./scripts/tools.psd1).CargoAbout
@@ -104,6 +112,7 @@ jobs:
             artifacts/portable-test-gates/**
             artifacts/vm-test-gates/**
             artifacts/performance-test-gates/**
+            artifacts/release-gates/**
           if-no-files-found: warn
 
   dependencies:
