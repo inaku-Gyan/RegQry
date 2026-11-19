@@ -12,7 +12,7 @@ categories = ["command-line-utilities", "os::windows-apis"]
 include = [
     "/Cargo.toml", "/Cargo.lock", "/LICENSE", "/README.md", "/CHANGELOG.md",
     "/src/**", "/tests/**", "/docs/usage.md", "/docs/matching.md",
-    "/docs/compatibility.md", "/docs/testing.md", "/docs/architecture.md",
+    "/docs/compatibility.md", "/docs/testing.md", "/docs/vm-testing.md", "/docs/architecture.md",
 ]
 
 [target.'cfg(windows)'.dependencies]
@@ -29,3 +29,4 @@ ctrlc = "3.5.3"
 [target.'cfg(windows)'.dev-dependencies]
 assert_cmd = "2.2.2"
 tempfile = "3.27.0"
+windows-sys = { version = "0.61.2", features = ["Win32_Security_Authorization"] }

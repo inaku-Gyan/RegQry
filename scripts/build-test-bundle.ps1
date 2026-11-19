@@ -118,7 +118,7 @@ try {
             ignored = $ignoredNames.Count
         }
     }
-    foreach ($file in @('run-tests.ps1', 'support.ps1', 'README.md')) {
+    foreach ($file in @('run-tests.ps1', 'run-vm-tests.ps1', 'support.ps1', 'README.md')) {
         Copy-Item -LiteralPath (Join-Path $PSScriptRoot ('bundle/' + $file)) -Destination (Join-Path $bundleRoot $file)
     }
     Copy-Item -LiteralPath (Join-Path $unpacked 'LICENSE') -Destination (Join-Path $bundleRoot 'LICENSE')

@@ -12,6 +12,8 @@ For changes in progress, `./scripts/check.ps1 -AllowDirty` permits Cargo packagi
 
 Native CI also builds a static-CRT test bundle from the Cargo archive, checks PE imports, runs the relocated bundle without Cargo on PATH, and probes rejected file/inventory/architecture states. See [portable test commands](docs/testing.md). These hosted runs do not replace minimum-system or clean-system acceptance.
 
+The [real registry VM suite](docs/vm-testing.md) uses separate elevated setup and ordinary-user query phases. Its tests are ignored by default. CI checks the opt-in/identity guards without creating global fixtures; VM rollback/destruction remains a required external cleanup step.
+
 The checks use locked dependencies, rustfmt, default Clippy, and warnings as errors. Add narrowly scoped lint exceptions only with a reason. Necessary unsafe Windows calls must state their SAFETY invariants. Add tests for observable contracts and meaningful failure cases; there is no global coverage percentage requirement.
 
 Dependency checks use the fixed cargo-deny version in `scripts/tools.psd1`. Install it with Cargo or use that exact official prebuilt release already installed elsewhere:

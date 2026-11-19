@@ -10,3 +10,4 @@ User-facing changes are reviewed here before creating a release tag. This projec
 - Local readonly registry queries with relative multi-root filters, regex/glob/data/type/time conditions, explicit views, streaming grouped previews, cancellation and incomplete-search diagnostics.
 - Constructed query/error tests and a private application-hive test for lossless native reads, long names, large values and unknown types.
 - Native static-CRT development test bundles with file identities, DLL inspection, Cargo-free relocation checks and controlled rejection probes.
+- An opt-in disposable-VM suite for real roots, physical registry views, minimum permissions and registry links, with separate setup/query tokens and preserved rollback requirements.
