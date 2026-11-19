@@ -29,24 +29,23 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Observe installation-token repository fields and reject a missing-tag draft request
+      - name: Observe installation-token fields and generate notes without saving a release
         shell: bash
         run: |
           mkdir proof
-          gh api "repos/$GITHUB_REPOSITORY" --jq '{id,full_name,permissions}' > proof/repository.json
+          gh api "repos/$GITHUB_REPOSITORY" --jq '{id,full_name,default_branch,permissions}' > proof/repository.json
           gh api "repos/$GITHUB_REPOSITORY/releases" --jq '[.[]|{id,tag_name,draft}]' > proof/before.json
-          printf '%s\n' '{"draft":true}' > proof/missing-tag.json
+          printf '%s\n' '{"tag_name":"v0.1.0"}' > proof/notes-request.json
           set +e
-          gh api --method POST "repos/$GITHUB_REPOSITORY/releases" --include --input proof/missing-tag.json > proof/response.txt 2> proof/stderr.txt
+          gh api --method POST "repos/$GITHUB_REPOSITORY/releases/generate-notes" --include --input proof/notes-request.json > proof/response.txt 2> proof/stderr.txt
           status=$?
           set -e
           printf '%s\n' "$status" > proof/exit.txt
           gh api "repos/$GITHUB_REPOSITORY/releases" --jq '[.[]|{id,tag_name,draft}]' > proof/after.json
           diff -u proof/before.json proof/after.json
           cat proof/repository.json proof/response.txt
-          test "$status" -ne 0
-          grep -E '^HTTP/[0-9.]+ 422' proof/response.txt
-          grep 'tag_name' proof/response.txt
+          test "$status" -eq 0
+          grep -E '^HTTP/[0-9.]+ 200' proof/response.txt
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
@@ -63,11 +62,11 @@ jobs:
         shell: bash
         run: |
           mkdir proof
-          gh api "repos/$GITHUB_REPOSITORY" --jq '{id,full_name,permissions}' > proof/repository.json
+          gh api "repos/$GITHUB_REPOSITORY" --jq '{id,full_name,default_branch,permissions}' > proof/repository.json
           gh api "repos/$GITHUB_REPOSITORY/releases" --jq '[.[]|{id,tag_name,draft}]' > proof/before.json
-          printf '%s\n' '{"draft":true}' > proof/missing-tag.json
+          printf '%s\n' '{"tag_name":"v0.1.0"}' > proof/notes-request.json
           set +e
-          gh api --method POST "repos/$GITHUB_REPOSITORY/releases" --include --input proof/missing-tag.json > proof/response.txt 2> proof/stderr.txt
+          gh api --method POST "repos/$GITHUB_REPOSITORY/releases/generate-notes" --include --input proof/notes-request.json > proof/response.txt 2> proof/stderr.txt
           status=$?
           set -e
           printf '%s\n' "$status" > proof/exit.txt
