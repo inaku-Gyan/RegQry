@@ -19,7 +19,7 @@ For a published version, download the Windows ZIP matching your native architect
 Alternatively, install the published Cargo package on Windows:
 
 ```powershell
-cargo install regqry --version 0.1.2 --locked
+cargo install regqry --version 0.1.3 --locked
 ```
 
 Cargo installation requires Rust 1.100.0 or a newer accepted compiler, native MSVC C++ build tools, and a Windows SDK. Only Rust 1.100.0 is tested. Non-Windows compilation is deliberately rejected.

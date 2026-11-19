@@ -589,19 +589,41 @@ try {
         }
     }
     Test-ReleaseCase 'collector binds original source logs and completed GitHub job provenance' {
-        & $collector -Stage Source -CandidatePath $candidatePath -ExpectedCandidateSha256 $candidateId -InputDirectory (Join-Path $fixtureRoot 'source-inputs') -QualityDirectory (Join-Path $evidenceRoot 'quality') -OutputDirectory $sourceCollected | Out-Null
+        & $collector -Stage source -CandidatePath $candidatePath -ExpectedCandidateSha256 $candidateId -InputDirectory (Join-Path $fixtureRoot 'source-inputs') -QualityDirectory (Join-Path $evidenceRoot 'quality') -OutputDirectory $sourceCollected | Out-Null
         $collected = Read-ReleaseJson (Join-Path $sourceCollected 'result.json')
         if ($collected.status -cne 'pass' -or $collected.stage -cne 'Source') { throw 'Source collection failed' }
         $global:RegQryReleaseModel.originalArtifacts['source-acceptance-original'] = $collected.archive
     }
     $collectedSource = Read-ReleaseJson (Join-Path $sourceCollected 'result.json')
+    $spellingIndex = 0
+    foreach ($spelling in @('Source', 'sOuRcE')) {
+        $spellingIndex++
+        Test-ReleaseCase ('source collector accepts stage spelling ' + $spelling) {
+            $root = Join-Path $fixtureRoot ('col-src-case-' + $spellingIndex)
+            & $collector -Stage $spelling -CandidatePath $candidatePath -ExpectedCandidateSha256 $candidateId -InputDirectory (Join-Path $fixtureRoot 'source-inputs') -QualityDirectory (Join-Path $evidenceRoot 'quality') -OutputDirectory $root | Out-Null
+            $collected = Read-ReleaseJson (Join-Path $root 'result.json')
+            $accepted = Read-ReleaseAcceptanceArchive $candidate $candidateId source $collected.archive
+            if ($collected.stage -cne 'Source' -or $accepted.evidence.stage -cne 'source' -or @($accepted.evidence.platforms).Count -ne 2) { throw 'Stage spelling changed source collection' }
+        }
+    }
     Test-ReleaseCase 'registry collector preserves the exact original source archive and files' {
-        & $collector -Stage Registry -CandidatePath $candidatePath -ExpectedCandidateSha256 $candidateId -InputDirectory (Join-Path $fixtureRoot 'registry-inputs') -SourceArchive $collectedSource.archive -ExpectedSourceSha256 $collectedSource.sha256 -OutputDirectory $registryCollected | Out-Null
+        & $collector -Stage registry -CandidatePath $candidatePath -ExpectedCandidateSha256 $candidateId -InputDirectory (Join-Path $fixtureRoot 'registry-inputs') -SourceArchive $collectedSource.archive -ExpectedSourceSha256 $collectedSource.sha256 -OutputDirectory $registryCollected | Out-Null
         $collected = Read-ReleaseJson (Join-Path $registryCollected 'result.json')
         $accepted = Read-ReleaseAcceptanceArchive $candidate $candidateId registry $collected.archive
         if ($accepted.evidence.sourceArchiveSha256 -cne $collectedSource.sha256) { throw 'Registry collection replaced its original source acceptance' }
     }
     $collectedRegistry = Read-ReleaseJson (Join-Path $registryCollected 'result.json')
+    $spellingIndex = 0
+    foreach ($spelling in @('Registry', 'rEgIsTrY')) {
+        $spellingIndex++
+        Test-ReleaseCase ('registry collector accepts stage spelling ' + $spelling) {
+            $root = Join-Path $fixtureRoot ('col-reg-case-' + $spellingIndex)
+            & $collector -Stage $spelling -CandidatePath $candidatePath -ExpectedCandidateSha256 $candidateId -InputDirectory (Join-Path $fixtureRoot 'registry-inputs') -SourceArchive $collectedSource.archive -ExpectedSourceSha256 $collectedSource.sha256 -OutputDirectory $root | Out-Null
+            $collected = Read-ReleaseJson (Join-Path $root 'result.json')
+            $accepted = Read-ReleaseAcceptanceArchive $candidate $candidateId registry $collected.archive
+            if ($collected.stage -cne 'Registry' -or $accepted.evidence.sourceArchiveSha256 -cne $collectedSource.sha256) { throw 'Stage spelling changed registry collection or its original source archive' }
+        }
+    }
     Test-ReleaseCase 'staging interrupted after upload reconciles the same original evidence' {
         $global:RegQryReleaseModel.uploadFailure = $true
         Assert-Rejected { & $modelScript -Action StageEvidence -Tag 'v0.1.0' -EvidenceStage source -InputDirectory $sourceCollected -OutputDirectory (Join-Path $fixtureRoot 'stage-src-fail') } 'unknown'

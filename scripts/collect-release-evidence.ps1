@@ -10,6 +10,9 @@ param(
     [string]$ExpectedSourceSha256
 )
 $ErrorActionPreference = 'Stop'
+# ValidateSet accepts every casing but preserves the caller's spelling.
+# Normalize before the case-sensitive source/registry dispatch below.
+$Stage = if ($Stage -ieq 'Source') { 'Source' } else { 'Registry' }
 . (Join-Path $PSScriptRoot 'release/support.ps1')
 . (Join-Path $PSScriptRoot 'release/evidence.ps1')
 if ((Get-ReleaseHash $CandidatePath) -cne $ExpectedCandidateSha256) { throw 'Frozen candidate identity differs before collection' }
