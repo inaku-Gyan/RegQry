@@ -5,6 +5,7 @@ param(
     [switch]$DisposableVm,
     [string]$QuerySid,
     [string]$RollbackReference,
+    [string]$PowerShell7,
     [ValidatePattern('^[a-fA-F0-9]{64}$')][string]$ExpectedManifestSha256,
     [string]$ReportDirectory = (Join-Path ([IO.Path]::GetTempPath()) ('regqry-vm-results-' + [guid]::NewGuid().ToString('N')))
 )
@@ -27,7 +28,7 @@ $result = [ordered]@{
     context = $null; globalHarnessesStarted = 0; cases = @()
     cleanup = 'not-started'; error = $null
 }
-$names = @('REGQRY_TEST_BIN', 'REGQRY_VM_CONFIRM', 'REGQRY_VM_PHASE', 'REGQRY_VM_ID', 'REGQRY_VM_NONCE', 'REGQRY_VM_QUERY_SID', 'REGQRY_VM_ROLLBACK')
+$names = @('REGQRY_TEST_BIN', 'REGQRY_TEST_PWSH', 'REGQRY_VM_CONFIRM', 'REGQRY_VM_PHASE', 'REGQRY_VM_ID', 'REGQRY_VM_NONCE', 'REGQRY_VM_QUERY_SID', 'REGQRY_VM_ROLLBACK')
 $saved = @{}
 foreach ($name in $names) { $saved[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
 $context = $null
@@ -64,11 +65,13 @@ try {
     }
     # Run the existing complete payload/PE/inventory verifier; ignored VM cases stay ignored here.
     foreach ($name in $names) { Remove-Item -LiteralPath ('Env:\' + $name) -ErrorAction SilentlyContinue }
+    if ($PowerShell7) { $env:REGQRY_TEST_PWSH = $PowerShell7 }
+    elseif ($saved.REGQRY_TEST_PWSH) { $env:REGQRY_TEST_PWSH = $saved.REGQRY_TEST_PWSH }
     & (Join-Path $PSScriptRoot 'run-tests.ps1') -ReportDirectory (Join-Path $reportRoot 'preflight') -ExpectedManifestSha256 $result.manifestSha256
     $manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding utf8 | ConvertFrom-Json
     $inventory = @($manifest.tests | Where-Object targetName -eq 'vm_registry')
-    if ($inventory.Count -ne 1 -or $inventory[0].ignored -ne 5) { throw 'Expected the complete VM harness with five ignored cases' }
-    $expectedCases = @('processes::vm_cli_processes: test', 'vm_link_sources_explicit_aliases_cycles_and_lookalikes: test', 'vm_minimum_permissions_and_partial_failure: test', 'vm_prepare: test', 'vm_roots_and_physical_views: test')
+    if ($inventory.Count -ne 1 -or $inventory[0].ignored -ne 6) { throw 'Expected the complete VM harness with six ignored cases' }
+    $expectedCases = @('processes::vm_cli_processes: test', 'shells::vm_cli_shells: test', 'vm_link_sources_explicit_aliases_cycles_and_lookalikes: test', 'vm_minimum_permissions_and_partial_failure: test', 'vm_prepare: test', 'vm_roots_and_physical_views: test')
     foreach ($case in $expectedCases) { if ($case -cnotin $inventory[0].names) { throw 'VM harness inventory is incomplete' } }
     if ($Phase -eq 'Prepare') {
         $random = [byte[]]::new(32)
@@ -97,7 +100,7 @@ try {
     $env:REGQRY_VM_QUERY_SID = $context.querySid
     $env:REGQRY_VM_ROLLBACK = $context.rollbackReference
     $result.cleanup = 'VM_ROLLBACK_REQUIRED'
-    $cases = if ($Phase -eq 'Prepare') { @('vm_prepare') } else { @('vm_roots_and_physical_views', 'vm_minimum_permissions_and_partial_failure', 'vm_link_sources_explicit_aliases_cycles_and_lookalikes', 'processes::vm_cli_processes') }
+    $cases = if ($Phase -eq 'Prepare') { @('vm_prepare') } else { @('vm_roots_and_physical_views', 'vm_minimum_permissions_and_partial_failure', 'vm_link_sources_explicit_aliases_cycles_and_lookalikes', 'processes::vm_cli_processes', 'shells::vm_cli_shells') }
     foreach ($case in $cases) {
         $logName = $case.Replace('::', '.')
         $result.globalHarnessesStarted++

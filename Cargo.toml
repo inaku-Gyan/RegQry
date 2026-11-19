@@ -13,6 +13,7 @@ include = [
     "/Cargo.toml", "/Cargo.lock", "/LICENSE", "/README.md", "/CHANGELOG.md",
     "/src/**", "/tests/**", "/docs/usage.md", "/docs/matching.md",
     "/docs/compatibility.md", "/docs/testing.md", "/docs/vm-testing.md", "/docs/architecture.md",
+    "/docs/terminal-validation.md",
 ]
 
 [target.'cfg(windows)'.dependencies]

@@ -51,11 +51,14 @@ jobs:
       - name: Clippy
         run: ./scripts/check.ps1 -Check lint -ExpectedHost '${{ matrix.target }}'
       - name: Tests
-        run: ./scripts/check.ps1 -Check test -ExpectedHost '${{ matrix.target }}'
+        run: |
+          $env:REGQRY_TEST_PWSH = Join-Path $PSHOME 'pwsh.exe'
+          ./scripts/check.ps1 -Check test -ExpectedHost '${{ matrix.target }}'
       - name: Package and independent source installation
         run: ./scripts/check.ps1 -Check package -ExpectedHost '${{ matrix.target }}'
       - name: Build and relocate native static-CRT test bundle
         run: |
+          $env:REGQRY_TEST_PWSH = Join-Path $PSHOME 'pwsh.exe'
           $metadataText = cargo metadata --locked --no-deps --format-version 1
           if ($LASTEXITCODE -ne 0) { throw 'Cargo metadata failed' }
           $metadata = $metadataText | ConvertFrom-Json

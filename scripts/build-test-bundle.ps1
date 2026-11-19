@@ -122,6 +122,7 @@ try {
         Copy-Item -LiteralPath (Join-Path $PSScriptRoot ('bundle/' + $file)) -Destination (Join-Path $bundleRoot $file)
     }
     Copy-Item -LiteralPath (Join-Path $unpacked 'LICENSE') -Destination (Join-Path $bundleRoot 'LICENSE')
+    Copy-Item -LiteralPath (Join-Path $unpacked 'docs/terminal-validation.md') -Destination (Join-Path $bundleRoot 'terminal-validation.md')
     $executables = @(Get-ChildItem -LiteralPath $bundleRoot -Recurse -File -Filter '*.exe' | Sort-Object FullName | ForEach-Object FullName)
     & (Join-Path $PSScriptRoot 'check-pe.ps1') -Executable $executables -Target $Target -ReportDirectory (Join-Path $bundleRoot 'pe') -Dumpbin $Dumpbin
     Copy-Item -LiteralPath (Join-Path $bundleRoot 'pe/result.json') -Destination (Join-Path $bundleRoot 'dll-imports.json')

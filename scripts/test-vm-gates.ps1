@@ -16,7 +16,7 @@ $result = [ordered]@{
     startedAtUtc = [DateTime]::UtcNow.ToString('o'); manifestSha256 = $null; source = $null; cases = @(); error = $null
 }
 $saved = @{}
-foreach ($name in @('REGQRY_TEST_BIN', 'REGQRY_VM_CONFIRM', 'REGQRY_VM_PHASE', 'REGQRY_VM_ID', 'REGQRY_VM_NONCE', 'REGQRY_VM_QUERY_SID', 'REGQRY_VM_ROLLBACK')) {
+foreach ($name in @('REGQRY_TEST_BIN', 'REGQRY_TEST_PWSH', 'REGQRY_VM_CONFIRM', 'REGQRY_VM_PHASE', 'REGQRY_VM_ID', 'REGQRY_VM_NONCE', 'REGQRY_VM_QUERY_SID', 'REGQRY_VM_ROLLBACK')) {
     $saved[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
 }
 try {
@@ -108,7 +108,7 @@ try {
     $result.cases += [ordered]@{ name = 'preflight-environment-restoration'; status = 'pass'; expectedRejection = $errorText; globalHarnessesStarted = 0; inertCopy = $copyRoot }
     # Direct --ignored cannot bypass the harness's independent Rust guard.
     foreach ($name in $saved.Keys) { Remove-Item -LiteralPath ('Env:\' + $name) -ErrorAction SilentlyContinue }
-    foreach ($case in @('vm_prepare', 'vm_roots_and_physical_views', 'vm_minimum_permissions_and_partial_failure', 'vm_link_sources_explicit_aliases_cycles_and_lookalikes', 'processes::vm_cli_processes')) {
+    foreach ($case in @('vm_prepare', 'vm_roots_and_physical_views', 'vm_minimum_permissions_and_partial_failure', 'vm_link_sources_explicit_aliases_cycles_and_lookalikes', 'processes::vm_cli_processes', 'shells::vm_cli_shells')) {
         $logName = $case.Replace('::', '.')
         $ran = Invoke-BundleProcess -Program (Join-Path $bundle $harness[0].path) -Arguments @('--ignored', '--exact', $case, '--nocapture')
         [IO.File]::WriteAllText((Join-Path $reportRoot ($logName + '.stdout.txt')), $ran.stdout, [Text.UTF8Encoding]::new($false))

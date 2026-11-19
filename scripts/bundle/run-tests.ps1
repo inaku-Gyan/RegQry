@@ -1,5 +1,6 @@
 [CmdletBinding()]
 param(
+    [string]$PowerShell7,
     [string]$ReportDirectory = (Join-Path ([IO.Path]::GetTempPath()) ('regqry-test-results-' + [guid]::NewGuid().ToString('N'))),
     [ValidatePattern('^[a-fA-F0-9]{64}$')][string]$ExpectedManifestSha256,
     [ValidateRange(1, 3600)][int]$TimeoutSeconds = 120
@@ -27,7 +28,8 @@ $result = [ordered]@{
     tests = @()
     error = $null
 }
-$savedBin = $env:REGQRY_TEST_BIN
+$saved = @{}
+foreach ($name in @('REGQRY_TEST_BIN', 'REGQRY_TEST_PWSH')) { $saved[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
 try {
     $manifestPath = Join-Path $bundleRoot 'bundle-manifest.json'
     $result.manifestSha256 = (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -88,6 +90,7 @@ try {
     $result.environment = Get-BundleEnvironment
     if ($result.environment.nativeTarget -ne $manifest.target) { throw 'Bundle target differs from native Windows architecture; emulation is not native acceptance' }
     $env:REGQRY_TEST_BIN = Join-Path $bundleRoot 'regqry.exe'
+    if ($PowerShell7) { $env:REGQRY_TEST_PWSH = $PowerShell7 }
     $result.processesStarted++
     $version = Invoke-BundleProcess -Program $env:REGQRY_TEST_BIN -Arguments @('--version') -TimeoutSeconds $TimeoutSeconds
     if ($version.timedOut -or $version.exitCode -ne 0 -or $version.stdout -cne ("regqry " + $manifest.version + "`n") -or $version.stderr) {
@@ -134,7 +137,7 @@ try {
     $result.error = $_.Exception.Message
     throw
 } finally {
-    $env:REGQRY_TEST_BIN = $savedBin
     $result.finishedAtUtc = [DateTime]::UtcNow.ToString('o')
-    Write-BundleJson -Value $result -Path (Join-Path $reportRoot 'result.json')
+    try { Write-BundleJson -Value $result -Path (Join-Path $reportRoot 'result.json') }
+    finally { Restore-BundleEnvironment -Saved $saved }
 }

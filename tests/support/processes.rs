@@ -78,7 +78,7 @@ fn check(ok: i32) {
 
 /// A new hidden console, never AttachConsole/FreeConsole on the caller. Closing
 /// the noninherited job kills its whole tree, including after panic or timeout.
-fn hidden_worker(directory: &Path, timeout: Duration) -> bool {
+pub(super) fn hidden_worker(directory: &Path, timeout: Duration) -> bool {
     let exe = std::env::current_exe().unwrap();
     let application = wide(exe.as_os_str());
     // Only the executable path needs quoting. Windows filenames cannot contain
@@ -299,6 +299,8 @@ fn isolated_console_probe() {
                     unreachable!("watchdog did not kill worker")
                 }
                 "vm" => vm_queries(&directory),
+                "shell-probe" => super::shells::checks(&directory, false),
+                "shell-vm" => super::shells::checks(&directory, true),
                 _ => panic!("unknown process worker request"),
             }
         });
