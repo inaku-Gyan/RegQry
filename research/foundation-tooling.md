@@ -1,12 +1,12 @@
 # RegQry 基建工具链、依赖图与 Windows 验证能力
 
-研究日期：2026-11-19。研究分支基线为 `main` 的 `34e02fa1a021689a61c059172737a53994180d1e`。本报告供基建工单决策使用；依赖选型及支持矩阵来自已解决的 06 / 07。研究期间用户已选择只维护一个固定 Rust 版本、声明要求与之对齐，不另设旧版最低支持 Rust 版本（Minimum Supported Rust Version，MSRV）测试线；下文 1.85 是依赖图事实，不是要求增加测试线。精确固定版本仍待主对话确认。
+研究日期：2026-11-19。研究分支基线为 `main` 的 `34e02fa1a021689a61c059172737a53994180d1e`。本报告供基建工单决策使用；依赖选型及支持矩阵来自已解决的「选择注册表适配方案与模块边界」（06）与「确定平台支持矩阵与分发约定」（07），帮助体验对齐「验证查询命令与默认结果的终端体验」（08）的已评审原型。研究期间用户已选择只维护一个固定 Rust 版本、声明要求与之对齐，不另设旧版最低支持 Rust 版本（Minimum Supported Rust Version，MSRV）测试线；下文 1.85 是依赖图事实，不是要求增加测试线。精确固定版本仍待主对话确认。
 
 证据标记：**事实**指官方文档或已发布归档源码；**观察**指本次下载、哈希或元数据探针；**推断 / 候选**指由事实得到的工程后果；**未验证**不构成支持保证。没有实现产品、修改工作流、调用任何注册表 API、运行上游注册表测试、读取凭据或查询账号私有状态。
 
 ## 1. 直接影响决策的事实
 
-- 选定的 `clap` 4.6.8、实际依赖 `clap_builder` 4.6.7，均声明 **edition 2024 / Rust 1.85**。项目采用 edition 2021 也不能降低这些依赖的下限；Rust 2024 在 1.85.0 稳定。本次候选生产图的两个 Windows 目标均未发现更高的**已声明**下限，但尚未用 1.85 实际编译。[clap 发布包][p-clap]、[builder 发布包][p-builder]、[Rust 1.85 发布公告][rust-185]
+- 选定的 `clap` 4.6.8、实际依赖 `clap_builder` 4.6.7，均声明 **edition 2024 / Rust 1.85**。项目采用 edition 2021 也不能降低这些依赖的下限；Rust 2024 在 1.85.0 稳定。保留已评审 80 列帮助的 `wrap_help` 候选在两个 Windows 目标均有 27 个外部活动包，未发现更高的**已声明**下限；尚未用 1.85 实际编译。[clap 发布包][p-clap]、[builder 发布包][p-builder]、[Rust 1.85 发布公告][rust-185]
 - 官方 stable 发布清单本次返回 **1.100.0，2026-11-12**；本机默认 `rustc / cargo 1.99.1` 是本地观察，不是项目版本决定。Cargo **1.100 起** `install` 默认使用包内锁文件；此前版本默认重新解析，需 `--locked`。不能把这两代 Cargo 的行为混写。[stable 清单][rust-channel]、[1.100.0 发布说明][rust-1100]、[当前 install 文档][cargo-install]
 - `cargo-deny` 0.21.0 发布包声明 **Rust 1.89 / edition 2024**；它与产品依赖的最低要求不同。若固定 1.100.0，当前这些声明均低于该版本，无须据此拆分编译器。工具仍需独立固定版本，未来升级也不能默认沿用旧要求。候选测试库 `proptest` 1.12.0 声明 1.88。[deny 发布包][p-deny]、[proptest 发布包][p-proptest]
 - 当前 GitHub 原生 ARM64 标签是 `windows-11-arm` / `windows-11-vs2026-arm`；映像清单为 **Windows 11 build 26200（25H2）**。它不能证明 ARM64 最低 **24H2 / build 26100**。原生 x64 托管映像是 Windows **Server**，不能替代已承诺的 Windows 10 22H2 / Windows 11 客户端验收。[runner 标签][gh-runners]、[ARM64 清单][gh-arm-image]、[Windows 版本表][ms-win11]
@@ -22,7 +22,7 @@
 | --- | --- | --- | --- |
 | [winreg 0.56.0][p-winreg] | 1.60 | 2021 | `default-features = false`，无额外 feature。`transactions`、`serialization-serde`、可选 `chrono` 均不是当前只读通路所需 |
 | [windows-sys 0.61.2][p-sys] | 1.71 | 2021 | 默认 feature 为空。直接使用 `Win32_Foundation`、`Win32_System_Registry`、`Win32_Globalization`，分别服务原始结构/状态、注册表 W API、`CompareStringOrdinal` |
-| [clap 4.6.8][p-clap] / [clap_builder 4.6.7][p-builder] | 1.85 | 2024 | builder API 候选：关闭默认，开 `std, help, usage, error-context`。`derive` 只在选择 derive 写法时需要；`color`、`suggestions`、`wrap_help`、`unicode`、`env`、`string` 并非这份候选的必需项 |
+| [clap 4.6.8][p-clap] / [clap_builder 4.6.7][p-builder] | 1.85 | 2024 | 对齐已评审帮助的 builder API 候选：关闭默认，开 `std, help, usage, error-context, wrap_help`，固定 `term_width(80)` / `max_term_width(80)`。不启用 derive / color / suggestions；unicode / env / string 亦非该候选必需 |
 | [regex 1.13.2][p-regex] | 1.65 | 2021 | 保留 Unicode 和既定正则语法；**组合后实际有默认 features**，原因见下文。不能宣称根声明的 `default-features = false` 已去除 perf / Unicode 表 |
 | [yash-fnmatch 1.1.2][p-yash] | 1.65.0 | 2021 | 没有公开 feature 开关；直接依赖启用默认 features 的 regex / regex-syntax，以及 thiserror 2 |
 | [chrono 0.4.45][p-chrono] | 1.62.0 | 2021 | 关闭默认，仅 `clock`：它已导入 `now -> std -> alloc`、Windows 的 `winapi -> windows-link`，满足本地日期与查询开始时刻；不需要 serde / rkyv / locales / wasm 便利功能 |
@@ -38,7 +38,7 @@ clap 最终若选择颜色、建议或 derive，需要重核依赖图和行为�
 
 ### 2.2 Windows 活动图，而非整个锁文件的最大值
 
-**观察：** metadata-only 探针用 edition 2024、`rust-version = "1.85"`、上表精确直接依赖及候选 features。先在线解析 x64，再用同一 lock `--offline --locked` 查询 ARM64；从 `resolve.root` 遍历活动边，两个目标均为 **26 个外部包 + 探针根**，包版本及 features 一致。没有编译、链接或执行。探针锁文件 SHA-256 为 `8246cd0f668ce24fae639ad55ebfcc8ca54166f2a48c9303bc31f7be70c3b276`。
+**观察：** 第一份 metadata-only 探针用 edition 2024、`rust-version = "1.85"`、上表精确直接依赖，但 clap **尚未启用 wrap_help**。先在线解析 x64，再用同一 lock `--offline --locked` 查询 ARM64；从 `resolve.root` 遍历活动边，两个目标均为 **26 个外部包 + 探针根**。这是无 wrap 的较小对照，**不是保留已评审帮助体验后的拟采用图**。没有编译、链接或执行。对照锁文件 SHA-256 为 `8246cd0f668ce24fae639ad55ebfcc8ca54166f2a48c9303bc31f7be70c3b276`。
 
 除九个直接包之外，活动图中的全部传递包如下；这些版本是本次解析快照，不是永久锁定承诺。每个数字来自下载归档的 normalized manifest，可沿链接复核。
 
@@ -55,6 +55,10 @@ clap 最终若选择颜色、建议或 derive，需要重核依赖图和行为�
 | chrono / windows-sys → [windows-link 0.2.1][t-link] | 1.71 | 2021；没有发现另一版 windows-sys 或 windows-targets 活动路径 |
 
 **边界：** 完整 lock / metadata 包列表还可能含 Unix、Apple、Wasm 或未活动的可选包；这不等于它们在两个 Windows 二进制中参与编译。反过来，MSRV 核查必须包含在宿主上编译的 build dependencies 和 proc macros，不能只看目标端运行库。这里没有把 ctrlc 的 Unix nix、chrono 的其他平台时区实现当作 Windows 活动依赖。[Cargo metadata 的平台过滤][cargo-metadata]、[Cargo resolver][cargo-resolver]
+
+**保留 80 列帮助的差异实查：** 已评审终端原型使用 `wrap_help` 与 `term_width(80).max_term_width(80)`。第二份探针在其余九个直接版本/设置不变时启用该 feature，在线解析后以同锁查询两个目标；均变为 **27 个外部包**。唯一新增活动包是 [terminal_size 0.4.4][t-terminal]，声明 **Rust 1.71 / edition 2021 / MIT OR Apache-2.0**，无 feature 表。其 Windows 依赖为 `windows-sys >=0.59, <=0.61` 的 Foundation / System_Console，复用现有 0.61.2；两项本来已由 winreg / ctrlc 启用，没有新 Windows 活动 feature 或更高声明下限。Unix rustix 仅进完整 lock，不进这两个 Windows 活动包图。第二份锁文件 SHA-256 为 `6e01b9584bb750147cdb8c8bd3a6731772db9e4fcb397eb28f060f0c7cbd0e76`。[builder 的 wrap_help 定义][p-builder]、[terminal_size 发布 manifest][t-terminal]
+
+**feature 证据注意：** 此次 metadata 的 `nodes[].features` 在平台过滤后仍出现由非 Windows 图合并来的 WinSock feature；因此没有据这个字段声称 Windows 实际构建多了 WinSock。另用 `cargo tree --target <两个 triple> -e features -i windows-sys` 交叉核对活动边，Windows Foundation / Console 与已有集合相同，未出现 Networking / WinSock。metadata 活动包数、完整 lock 范围与目标构建 feature 不能混为一谈。[Cargo tree 的 feature 图说明][cargo-tree]
 
 **推断：** 1.85 是这份图的已声明下限，因为较低版本连已选 clap 的 2024 manifest 都无法支持；它不是已经证明的项目 MSRV。缺失/错误的声明、依赖内部新 API、编译器 bug、SDK/链接器要求和项目代码都可能另增约束。真正保证需要在项目实际声明的固定工具链上对两个原生目标构建、测试及安装。没有安装 1.85 或擅自 pin 本机工具链。
 
@@ -231,7 +235,7 @@ ARM64 上的 `KEY_WOW64_32KEY` 对原生 ARM64 进程指向 x86 32 位视图，`
 
 ## 8. 本次证据、限制及交接
 
-**实际完成：** 阅读精确发布归档；对生产图使用一次在线解析与同锁双平台 metadata；核对 manifest / features / 校验值；对四个测试候选做 metadata 调查；浏览当前官方 Rust、GitHub、Microsoft、cargo-deny 文档及发布页。探针、下载和本机分发文档副本/读取记录仅在研究工作树忽略目录 `.scratch/`，提交仅本报告。该目录不是产品 fixture，也没有执行会创建注册表键的任何上游测试。
+**实际完成：** 阅读精确发布归档；对无 wrap / 保留 wrap_help 两种生产对照分别在线解析与同锁查询双平台 metadata，并用目标 cargo tree 核对 feature；核对 manifest / 校验值；对四个测试候选做 metadata 调查；浏览当前官方 Rust、GitHub、Microsoft、cargo-deny 文档及发布页。探针、下载和本机分发文档副本/读取记录仅在研究工作树忽略目录 `.scratch/`，提交仅本报告。该目录不是产品 fixture，也没有执行会创建注册表键的任何上游测试。
 
 本机观察为 `rustc 1.99.1 (58cf8f9c3 2026-10-13)`、`cargo 1.99.1 (5f94df478 2026-08-27)`、host `x86_64-pc-windows-msvc`；从官方 stable 清单另证实 1.100.0，不能将本地默认工具版本当成网上当前发布版本。本次网络部分 API/文档请求超时，未将超时填成不存在；关键版本另以新 Cargo 索引、公开归档与官方 release 交叉核实。特别记录三处滚动文档差异：cargo install 1.100 行为相对本机 1.99 手册已变；package 页仍留旧 `--locked` 描述；cargo-deny 书中旧 `--disable-fetch` / 部分旧 advisory 配置说明以 0.21 发布解析器为准。
 
@@ -288,6 +292,7 @@ ARM64 上的 `KEY_WOW64_32KEY` 对原生 ARM64 进程指向 x86 32 位视图，`
 [t-cfg]: https://static.crates.io/crates/cfg-if/cfg-if-1.0.5.crate
 [t-link]: https://static.crates.io/crates/windows-link/windows-link-0.2.1.crate
 [t-getrandom]: https://static.crates.io/crates/getrandom/getrandom-0.4.3.crate
+[t-terminal]: https://static.crates.io/crates/terminal_size/terminal_size-0.4.4.crate
 [rust-channel]: https://static.rust-lang.org/dist/channel-rust-stable.toml
 [rust-185]: https://blog.rust-lang.org/2025/02/20/Rust-1.85.0/
 [rust-1100]: https://github.com/rust-lang/rust/releases/tag/1.100.0
