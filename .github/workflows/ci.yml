@@ -69,6 +69,7 @@ jobs:
           ./scripts/check-test-bundle.ps1 -BundleArchive $built.bundle.archive -ExpectedArchiveSha256 $built.bundle.sha256 -ExpectedManifestSha256 $built.bundle.manifestSha256 -ReportDirectory artifacts/portable-test-check
           ./scripts/test-bundle-gates.ps1 -BundleDirectory $built.bundle.directory -BundleArchive $built.bundle.archive -ReportDirectory artifacts/portable-test-gates
           ./scripts/test-vm-gates.ps1 -BundleDirectory $built.bundle.directory -ReportDirectory artifacts/vm-test-gates
+          ./scripts/test-performance-gates.ps1 -BundleDirectory $built.bundle.directory -ReportDirectory artifacts/performance-test-gates
       - name: Preserve package-check records
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -88,6 +89,7 @@ jobs:
             artifacts/portable-test-check/**
             artifacts/portable-test-gates/**
             artifacts/vm-test-gates/**
+            artifacts/performance-test-gates/**
           if-no-files-found: warn
 
   dependencies:

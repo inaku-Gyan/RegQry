@@ -14,6 +14,7 @@ User-facing changes are reviewed here before creating a release tag. This projec
 - Native private-hive checks for changing/deleted values, retry exhaustion, malformed UTF-16 names and saved data; real closed-pipe write/flush checks in the query/output path.
 - Isolated console/process-control probes and opt-in VM cases for actual CLI streaming, Ctrl+C, closed stdout pipes, long values and first-result/working-set measurements.
 - Actual cmd/Windows PowerShell 5.1/PowerShell 7 invocation and encoding checks, with separate owned-VM query cases and a manual terminal acceptance record template.
+- Fixed deep/wide scaling fixtures and exact-result VM measurement, plus an explicit aggregate-only live-query observer with no retained registry contents.
 
 ### Fixed
 

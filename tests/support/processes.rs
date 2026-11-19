@@ -301,6 +301,9 @@ fn isolated_console_probe() {
                 "vm" => vm_queries(&directory),
                 "shell-probe" => super::shells::checks(&directory, false),
                 "shell-vm" => super::shells::checks(&directory, true),
+                "scale-probe" => super::performance::control_probe(),
+                "scale-vm" => super::performance::vm_measure(&directory),
+                "live-performance" => super::performance::live_measure(&directory),
                 _ => panic!("unknown process worker request"),
             }
         });
@@ -343,14 +346,14 @@ fn isolated_console_probe() {
 
 /// Each actual CLI is additionally reaped on assertion failure before its handles
 /// are released; the enclosing worker job is a second, independent boundary.
-struct Query(Child);
+pub(super) struct Query(pub(super) Child);
 impl Drop for Query {
     fn drop(&mut self) {
         let _ = self.0.kill();
         let _ = self.0.wait();
     }
 }
-fn spawn(mut command: Command) -> Query {
+pub(super) fn spawn(mut command: Command) -> Query {
     Query(
         command
             .stdin(Stdio::null())
@@ -361,19 +364,22 @@ fn spawn(mut command: Command) -> Query {
     )
 }
 fn wait(query: &mut Query) -> i32 {
+    wait_for(query, Duration::from_secs(30))
+}
+pub(super) fn wait_for(query: &mut Query, timeout: Duration) -> i32 {
     let start = Instant::now();
     loop {
         if let Some(status) = query.0.try_wait().unwrap() {
             return status.code().unwrap();
         }
         assert!(
-            start.elapsed() < Duration::from_secs(30),
+            start.elapsed() < timeout,
             "CLI watchdog expired; not a cancellation success"
         );
         thread::sleep(Duration::from_millis(5));
     }
 }
-fn peak(query: &Query) -> usize {
+pub(super) fn peak(query: &Query) -> usize {
     let mut memory = PROCESS_MEMORY_COUNTERS {
         cb: std::mem::size_of::<PROCESS_MEMORY_COUNTERS>() as u32,
         ..Default::default()
@@ -387,6 +393,15 @@ fn peak(query: &Query) -> usize {
         )
     });
     memory.PeakWorkingSetSize
+}
+
+pub(super) fn producer_command(directory: &Path) -> Command {
+    fs::write(directory.join("request.txt"), "producer").unwrap();
+    let mut command = Command::new(std::env::current_exe().unwrap());
+    command
+        .args(["--exact", WORKER, "--format=terse", "--test-threads=1"])
+        .arg(request_argument(directory));
+    command
 }
 fn rest(mut reader: impl Read) -> Vec<u8> {
     let mut bytes = Vec::new();

@@ -1,4 +1,6 @@
 #![cfg(windows)]
+#[path = "support/performance.rs"]
+mod performance;
 #[path = "support/processes.rs"]
 mod processes;
 #[path = "support/shells.rs"]
@@ -177,6 +179,7 @@ fn vm_prepare() {
         if view == KEY_WOW64_64KEY {
             processes::prepare(&root, &context);
             shells::prepare(&root, &context);
+            performance::prepare(&root, &context);
             let target = child(&root, "Target", view, &context, 9);
             let branch = child(&target, "Branch", view, &context, 9);
             let leaf = child(&branch, "Leaf", view, &context, 9);
