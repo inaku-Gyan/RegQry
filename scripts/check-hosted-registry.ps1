@@ -3,6 +3,7 @@ param(
     [Parameter(Mandatory)][string]$InputDirectory,
     [Parameter(Mandatory)][string]$ReportDirectory,
     [Parameter(Mandatory)][string]$PowerShell7,
+    [switch]$RegistryInstall,
     [switch]$GitHubHostedVm
 )
 $ErrorActionPreference = 'Stop'
@@ -33,6 +34,7 @@ $record = [ordered]@{
     setupEnvironment = $native; querySid = $null; queryEnvironment = $null; sharedDirectory = $sharedRoot
     workflow = [ordered]@{ repository=$env:GITHUB_REPOSITORY; runId=$env:GITHUB_RUN_ID; attempt=$env:GITHUB_RUN_ATTEMPT; job=$env:GITHUB_JOB; workflowRef=$env:GITHUB_WORKFLOW_REF; runner=$env:RUNNER_NAME; image=$env:ImageOS; imageVersion=$env:ImageVersion }
     lifecycle = [ordered]@{ mode='github-hosted-job'; contract='https://docs.github.com/en/actions/how-tos/manage-runners/github-hosted-runners/use-github-hosted-runners'; observedDestruction=$false; accountRemoved=$false }
+    installation = $(if ($RegistryInstall) { 'registry' } else { 'source-archive' })
     worker = $null; error = $null
 }
 $account = $null; $process = $null; $processStarted = $false; $password = $null; $workerOut = $null; $workerErr = $null
@@ -53,11 +55,31 @@ try {
     $bundleRoot = Join-Path $expanded ('regqry-v' + $built.version + '-tests-' + $built.target)
     if ((Get-ReleaseHash (Join-Path $bundleRoot 'bundle-manifest.json')) -cne $built.tests.manifestSha256) { throw 'Hosted bundle manifest identity changed' }
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'hosted/worker.ps1') -Destination (Join-Path $sharedRoot 'worker.ps1')
+    $libraryRoot = New-ReleaseDirectory (Join-Path $sharedRoot 'library')
+    foreach ($folder in @('release','bundle')) {
+        $libraryFolder = New-ReleaseDirectory (Join-Path $libraryRoot $folder)
+        Copy-Item -LiteralPath (Join-Path $PSScriptRoot ($folder + '/support.ps1')) -Destination $libraryFolder
+    }
+    $sourceDirectory = Join-Path $sharedRoot 'source'
+    Get-ReleaseSourceInventory $built.sourceArchive $built.version $sourceDirectory | Out-Null
+    $unpackedSource = Join-Path $sourceDirectory ('regqry-' + $built.version)
+    Assert-ReleaseInventory $unpackedSource $built.sourceFiles
+    $sourceArchive = Join-Path $sharedRoot $built.source.file
+    Copy-Item -LiteralPath $built.sourceArchive -Destination $sourceArchive
+    $toolchain = '1.100.0-' + $built.target
+    $cargoPath = & rustup which --toolchain $toolchain cargo
+    if ($LASTEXITCODE -ne 0) { throw 'Cannot identify pinned Cargo for the ordinary-user installation' }
+    $compilerPath = & rustup which --toolchain $toolchain rustc
+    if ($LASTEXITCODE -ne 0) { throw 'Cannot identify the pinned native compiler' }
+    $compiler = @(& $compilerPath -Vv)
+    if ($LASTEXITCODE -ne 0 -or $compiler -cnotcontains 'release: 1.100.0' -or $compiler -cnotcontains ('host: ' + $built.target)) { throw 'Ordinary-user installation requires the pinned native compiler' }
+    $toolchainRoot = Split-Path -Parent (Split-Path -Parent $compilerPath)
     $workerReports = New-ReleaseDirectory (Join-Path $sharedRoot 'reports')
+    $workerWork = New-ReleaseDirectory (Join-Path $sharedRoot 'work')
     $contextPath = Join-Path $sharedRoot 'fixture-context.json'
     $startPath = Join-Path $sharedRoot 'start-query.json'
     $readyPath = Join-Path $workerReports 'ready.json'
-    $configuration = [ordered]@{ schemaVersion=1; bundle=$bundleRoot; manifestSha256=$built.tests.manifestSha256; context=$contextPath; start=$startPath; ready=$readyPath; reports=$workerReports; powerShell7=$PowerShell7 }
+    $configuration = [ordered]@{ schemaVersion=1; bundle=$bundleRoot; manifestSha256=$built.tests.manifestSha256; context=$contextPath; start=$startPath; ready=$readyPath; reports=$workerReports; work=$workerWork; library=$libraryRoot; powerShell7=$PowerShell7; cargo=$cargoPath; compiler=$compilerPath; source=$unpackedSource; archive=$sourceArchive; sourceSha256=$built.source.sha256; version=$built.version; target=$built.target; registryInstall=[bool]$RegistryInstall }
     $configurationPath = Join-Path $sharedRoot 'worker-config.json'
     Write-BundleJson $configuration $configurationPath
     $random = [byte[]]::new(32); $rng = [Security.Cryptography.RandomNumberGenerator]::Create()
@@ -71,6 +93,12 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Cannot secure hosted shared inputs' }
     & icacls.exe $workerReports /grant:r ('*' + $account.SID.Value + ':(OI)(CI)M') | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'Cannot grant the query account its report directory' }
+    & icacls.exe $workerWork /grant:r ('*' + $account.SID.Value + ':(OI)(CI)M') | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'Cannot grant the query account its build/cache directory' }
+    # Only compiler data is shared read-only, never the maintainer's Cargo home
+    # or credential files. The ordinary account uses its own fresh cache.
+    & icacls.exe $toolchainRoot /grant:r ('*' + $account.SID.Value + ':(OI)(CI)RX') | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'Cannot grant read-only native toolchain access' }
     foreach ($name in $saved.Keys) { Remove-Item -LiteralPath ('Env:\' + $name) -ErrorAction SilentlyContinue }
     $start = [Diagnostics.ProcessStartInfo]::new()
     $start.FileName = Join-Path $env:WINDIR 'System32/WindowsPowerShell/v1.0/powershell.exe'

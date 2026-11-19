@@ -102,7 +102,7 @@ fn cases(root: Option<&str>, denied: &str) -> Vec<Case> {
             case(
                 "default-name",
                 &["--name=^$"],
-                "--name=^$",
+                r#"--name="^$""#,
                 "'--name=^$'",
                 0,
             ),
@@ -134,14 +134,14 @@ fn cases(root: Option<&str>, denied: &str) -> Vec<Case> {
             case(
                 "expanded",
                 &["--name=^Env$", "--data-expand=^expanded-节点$"],
-                "--name=^Env$ --data-expand=\"^expanded-节点$\"",
+                r#"--name="^Env$" --data-expand="^expanded-节点$""#,
                 "'--name=^Env$' '--data-expand=^expanded-节点$'",
                 0,
             ),
             case(
                 "quiet",
                 &["--name=^not-present$"],
-                "--name=^not-present$",
+                r#"--name="^not-present$""#,
                 "'--name=^not-present$'",
                 1,
             ),

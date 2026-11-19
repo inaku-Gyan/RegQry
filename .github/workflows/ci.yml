@@ -146,6 +146,10 @@ jobs:
           name: native-assets-${{ matrix.target }}
           path: artifacts/inputs
           digest-mismatch: error
+      - name: Install pinned native source-installation compiler
+        run: |
+          rustup toolchain install '1.100.0-${{ matrix.target }}' --profile minimal
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Prepare as administrator and query as a fresh ordinary user
         env:
           GH_TOKEN: ''

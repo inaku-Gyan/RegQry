@@ -6,6 +6,7 @@ param(
     [string]$QuerySid,
     [string]$RollbackReference,
     [string]$PowerShell7,
+    [string]$CliPath,
     [ValidatePattern('^[a-fA-F0-9]{64}$')][string]$ExpectedManifestSha256,
     [string]$ReportDirectory = (Join-Path ([IO.Path]::GetTempPath()) ('regqry-vm-results-' + [guid]::NewGuid().ToString('N')))
 )
@@ -26,7 +27,7 @@ $result = [ordered]@{
     startedAtUtc = [DateTime]::UtcNow.ToString('o')
     manifestSha256 = $null; environment = $null; contextSha256 = $null
     context = $null; globalHarnessesStarted = 0; cases = @()
-    cleanup = 'not-started'; error = $null
+    cleanup = 'not-started'; cli = $null; error = $null
 }
 $names = @('REGQRY_TEST_BIN', 'REGQRY_TEST_PWSH', 'REGQRY_LIVE_CONFIRM', 'REGQRY_VM_CONFIRM', 'REGQRY_VM_PHASE', 'REGQRY_VM_ID', 'REGQRY_VM_NONCE', 'REGQRY_VM_QUERY_SID', 'REGQRY_VM_ROLLBACK')
 $saved = @{}
@@ -36,6 +37,7 @@ try {
     # This is an explicit operator attestation, not a heuristic claim that VM detection proves disposability.
     if (-not $DisposableVm) { throw 'Requires -DisposableVm and a rollback reference; never run this suite on a developer workstation' }
     if ($Phase -eq 'Prepare') {
+        if ($CliPath) { throw 'An installed CLI can only be selected for the query phase' }
         if (Test-Path -LiteralPath $contextFile) { throw 'Preparation context must not exist; rerunning preparation never adopts an existing fixture' }
         if ($QuerySid -notmatch '^S-1-5-21-[0-9]+-[0-9]+-[0-9]+-[0-9]+$' -or [string]::IsNullOrWhiteSpace($RollbackReference)) { throw 'Preparation requires an ordinary-user QuerySid and a nonempty RollbackReference' }
         $canonicalSid = [Security.Principal.SecurityIdentifier]::new($QuerySid)
@@ -93,6 +95,14 @@ try {
     $result.context = $context
     $result.contextSha256 = (Get-FileHash -LiteralPath $contextFile -Algorithm SHA256).Hash.ToLowerInvariant()
     $env:REGQRY_TEST_BIN = Join-Path $PSScriptRoot 'regqry.exe'
+    if ($CliPath) {
+        $installed = Get-Item -LiteralPath $CliPath
+        if ($installed.PSIsContainer -or ($installed.Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Installed CLI must be a regular file' }
+        $env:REGQRY_TEST_BIN = $installed.FullName
+        $version = Invoke-BundleProcess -Program $env:REGQRY_TEST_BIN -Arguments @('--version')
+        if ($version.timedOut -or $version.exitCode -ne 0 -or $version.stderr -or $version.stdout -cne ('regqry ' + $manifest.version + "`n")) { throw 'Installed CLI version mismatch' }
+    }
+    $result.cli = [ordered]@{ origin=$(if ($CliPath) { 'installed' } else { 'bundle' }); path=$env:REGQRY_TEST_BIN; sha256=(Get-FileHash -LiteralPath $env:REGQRY_TEST_BIN).Hash.ToLowerInvariant() }
     $env:REGQRY_VM_CONFIRM = 'disposable-vm-rollback-required'
     $env:REGQRY_VM_PHASE = $Phase.ToLowerInvariant()
     $env:REGQRY_VM_ID = $context.id
