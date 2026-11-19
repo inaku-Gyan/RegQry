@@ -1,0 +1,15 @@
+# Hosted ordinary-user registry acceptance
+
+Acceptance uses standard GitHub-hosted native x64 Windows Server and ARM64 Windows 11 jobs. Windows 10 22H2 / x64 Windows 11 and ARM64 Windows 11 24H2+ remain compatibility targets; the minimum client versions and Windows installations without developer tools are not directly tested. Record actual OS/image versions instead of claiming that the runner label pins them.
+
+The dedicated `hosted-registry` CI job consumes the preceding native job's original user/test ZIPs and Cargo archive. It checks checkout/source/archive identities and relocates the assets before creating any fixture. Ordinary build/test jobs still create no global fixture. This dedicated job explicitly opts into its disposable hosted VM.
+
+`scripts/check-hosted-registry.ps1` creates a unique temporary local Users account, excludes administrator membership, and launches a hidden native Windows PowerShell process with its profile loaded. A readiness handshake verifies its actual SID, non-elevated token, native architecture and loaded HKU profile. The worker stays alive while the administrator prepares the existing owned/nonce-marked fixture, then runs the existing complete query suite as that ordinary identity. Passwords remain in process memory; no new secret, App or publishing credential is used.
+
+The suite exercises actual ROOTs, physical registry views, ACL failures, symbolic links, bundled CLI processes, three shells, fixed scaling data and automated console Ctrl+C. Original records preserve fixture context, both roles, every case's stdout/stderr, exit state and native environment. The current initial implementation exercises the bundled CLI; ordinary-user source/registry installation and release evidence integration are subsequent checks, not assumed passes.
+
+GitHub [provides a fresh Windows VM for each job and decommissions it after completion](https://docs.github.com/en/actions/how-tos/manage-runners/github-hosted-runners/use-github-hosted-runners). Acceptance binds records to the actual workflow/run/job and that provider lifecycle contract. It does not invent a per-VM destruction receipt or claim to have observed destruction. The controller removes the temporary account after stopping its worker; the job VM's registry fixtures and profile are disposed of by the platform. Do not run the fixture suite on a workstation or self-hosted runner.
+
+Visible classic-console/Windows-Terminal rendering at 80/120 columns and physical-keyboard Ctrl+C are deferred. Automated UTF-8/output/exit-code checks and real console control events are the release requirements; they establish neither visual inspection nor physical input. Restricted PATH, static CRT and import checks remain useful evidence and do not establish a clean minimum-client installation.
+
+This path is being validated in the implementation branch. A failed or unexecuted role/case remains a release blocker. Original Actions records must ultimately be retained inside the version's durable release evidence, with candidate/archive identity binding; expiring Actions artifacts alone are insufficient.
