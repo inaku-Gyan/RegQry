@@ -108,7 +108,7 @@ try {
     $result.cases += [ordered]@{ name = 'preflight-environment-restoration'; status = 'pass'; expectedRejection = $errorText; globalHarnessesStarted = 0; inertCopy = $copyRoot }
     # Direct --ignored cannot bypass the harness's independent Rust guard.
     foreach ($name in $saved.Keys) { Remove-Item -LiteralPath ('Env:\' + $name) -ErrorAction SilentlyContinue }
-    foreach ($case in @('vm_prepare', 'vm_roots_and_physical_views', 'vm_minimum_permissions_and_partial_failure', 'vm_link_sources_explicit_aliases_cycles_and_lookalikes')) {
+    foreach ($case in @('vm_prepare', 'vm_roots_and_physical_views', 'vm_minimum_permissions_and_partial_failure', 'vm_link_sources_explicit_aliases_cycles_and_lookalikes', 'processes::vm_cli_processes')) {
         $ran = Invoke-BundleProcess -Program (Join-Path $bundle $harness[0].path) -Arguments @('--ignored', '--exact', $case, '--nocapture')
         [IO.File]::WriteAllText((Join-Path $reportRoot ($case + '.stdout.txt')), $ran.stdout, [Text.UTF8Encoding]::new($false))
         [IO.File]::WriteAllText((Join-Path $reportRoot ($case + '.stderr.txt')), $ran.stderr, [Text.UTF8Encoding]::new($false))

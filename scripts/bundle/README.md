@@ -10,4 +10,6 @@ The bundle contains the actual CLI, Rust test harnesses, their complete test inv
 
 A timeout is a test failure, not a completed query. A successful run verifies this test layer on the recorded machine. It does not prove the formal minimum/clean-system, ordinary-user, real-console, or release matrix. These development bundles are not frozen release candidates and are not public release assets; final release packaging must add the reviewed third-party distribution materials.
 
+The ordinary suite also creates a hidden isolated console and job to test process control with a constructed producer. CONTROL_PROBE metrics verify the apparatus, not RegQry query performance. The separate ignored VM suite includes actual CLI streaming, Ctrl+C, closed-pipe and long-result cases; they require the same prepared disposable VM and remain distinct from these ordinary probes.
+
 `dll-imports.json` records direct and delay-load imports inspected by MSVC dumpbin. Static CRT and reviewed system imports are required. This does not prove dynamically loaded DLLs, imported API availability, or clean minimum-system execution.

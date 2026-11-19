@@ -67,8 +67,8 @@ try {
     & (Join-Path $PSScriptRoot 'run-tests.ps1') -ReportDirectory (Join-Path $reportRoot 'preflight') -ExpectedManifestSha256 $result.manifestSha256
     $manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding utf8 | ConvertFrom-Json
     $inventory = @($manifest.tests | Where-Object targetName -eq 'vm_registry')
-    if ($inventory.Count -ne 1 -or $inventory[0].ignored -ne 4) { throw 'Expected the complete VM harness with four ignored cases' }
-    $expectedCases = @('vm_link_sources_explicit_aliases_cycles_and_lookalikes: test', 'vm_minimum_permissions_and_partial_failure: test', 'vm_prepare: test', 'vm_roots_and_physical_views: test')
+    if ($inventory.Count -ne 1 -or $inventory[0].ignored -ne 5) { throw 'Expected the complete VM harness with five ignored cases' }
+    $expectedCases = @('processes::vm_cli_processes: test', 'vm_link_sources_explicit_aliases_cycles_and_lookalikes: test', 'vm_minimum_permissions_and_partial_failure: test', 'vm_prepare: test', 'vm_roots_and_physical_views: test')
     foreach ($case in $expectedCases) { if ($case -cnotin $inventory[0].names) { throw 'VM harness inventory is incomplete' } }
     if ($Phase -eq 'Prepare') {
         $random = [byte[]]::new(32)
@@ -97,7 +97,7 @@ try {
     $env:REGQRY_VM_QUERY_SID = $context.querySid
     $env:REGQRY_VM_ROLLBACK = $context.rollbackReference
     $result.cleanup = 'VM_ROLLBACK_REQUIRED'
-    $cases = if ($Phase -eq 'Prepare') { @('vm_prepare') } else { @('vm_roots_and_physical_views', 'vm_minimum_permissions_and_partial_failure', 'vm_link_sources_explicit_aliases_cycles_and_lookalikes') }
+    $cases = if ($Phase -eq 'Prepare') { @('vm_prepare') } else { @('vm_roots_and_physical_views', 'vm_minimum_permissions_and_partial_failure', 'vm_link_sources_explicit_aliases_cycles_and_lookalikes', 'processes::vm_cli_processes') }
     foreach ($case in $cases) {
         $result.globalHarnessesStarted++
         $ran = Invoke-BundleProcess -Program (Join-Path $PSScriptRoot $inventory[0].path) -Arguments @('--ignored', '--exact', $case, '--test-threads=1', '--nocapture') -TimeoutSeconds 180

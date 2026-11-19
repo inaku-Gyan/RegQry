@@ -1,4 +1,6 @@
 #![cfg(windows)]
+#[path = "support/processes.rs"]
+mod processes;
 mod support;
 use std::{ffi::OsStr, io, path::PathBuf, time::Duration};
 use support::vm::*;
@@ -171,6 +173,7 @@ fn vm_prepare() {
             }
         }
         if view == KEY_WOW64_64KEY {
+            processes::prepare(&root, &context);
             let target = child(&root, "Target", view, &context, 9);
             let branch = child(&target, "Branch", view, &context, 9);
             let leaf = child(&branch, "Leaf", view, &context, 9);

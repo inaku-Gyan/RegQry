@@ -12,6 +12,7 @@ User-facing changes are reviewed here before creating a release tag. This projec
 - Native static-CRT development test bundles with file identities, DLL inspection, Cargo-free relocation checks and controlled rejection probes.
 - An opt-in disposable-VM suite for real roots, physical registry views, minimum permissions and registry links, with separate setup/query tokens and preserved rollback requirements.
 - Native private-hive checks for changing/deleted values, retry exhaustion, malformed UTF-16 names and saved data; real closed-pipe write/flush checks in the query/output path.
+- Isolated console/process-control probes and opt-in VM cases for actual CLI streaming, Ctrl+C, closed stdout pipes, long values and first-result/working-set measurements.
 
 ### Fixed
 

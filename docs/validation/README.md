@@ -12,6 +12,8 @@ The explicit two-phase global suite and its unexecuted VM boundary are recorded 
 
 Private-hive mutation, malformed names/data and real closed-pipe output are recorded in [native read stability checks](native-read-2026-11-19.md).
 
+Hidden-console delivery and process-control tooling are recorded in [CLI process tooling checks](cli-processes-2026-11-19.md); the new actual CLI VM cases remain unexecuted.
+
 | Requirement | Current status |
 | --- | --- |
 | Native x64 and ARM64 hosted checks | Workflow implemented; remote execution pending |
@@ -20,6 +22,7 @@ Private-hive mutation, malformed names/data and real closed-pipe output are reco
 | Native ARM64 Windows 11 24H2 ordinary user and clean system | Missing environment |
 | Actual 32/64 view, ACL, links, long/malformed values | Opt-in ROOT/view/ACL/link VM suite implemented, not run; x64 private-hive long/malformed data and controlled changes checked; ARM64 execution pending |
 | Three shells on each formal system; 80/120-column representative console/Terminal runs | Product acceptance not run |
+| Actual CLI Ctrl+C, closed pipeline and fixed generated streaming baseline | VM case implemented, not run; isolated constructed-producer control probe passed locally |
 | Portable candidate test bundles and DLL checks | Development builder, x64 DLL checks and relocated tests passed; frozen candidates, ARM64 and clean minimum systems pending |
 | Candidate source/ZIP hashes and repeatable Cargo archive | Release implementation pending |
 | First local crates.io initialization, Trusted Publisher, registry installs and immutable release | Release implementation pending |

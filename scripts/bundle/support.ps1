@@ -22,7 +22,7 @@ function Invoke-BundleProcess {
     param([string]$Program, [string[]]$Arguments, [int]$TimeoutSeconds = 120)
     # All callers pass fixed harness switches, not shell command strings.
     foreach ($argument in $Arguments) {
-        if ($argument -notmatch '^[a-zA-Z0-9_=.-]+$') { throw 'Unsupported harness argument' }
+        if ($argument -notmatch '^[a-zA-Z0-9_=:.-]+$') { throw 'Unsupported harness argument' }
     }
     $start = [Diagnostics.ProcessStartInfo]::new()
     $start.FileName = $Program
