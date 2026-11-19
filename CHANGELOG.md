@@ -4,6 +4,18 @@ Version entries are reviewed before their release tags. See [GitHub Releases](ht
 
 ## Unreleased
 
+## [0.1.1] - 2026-11-20
+
+First publication candidate, containing the initial read-only registry search features described under 0.1.0.
+
+### Fixed
+
+- Allow the GitHub Actions installation token to pass release preparation by checking actual Contents write capability without creating or changing a Release. Repository `permissions.push` can be false for a correctly scoped installation token.
+
+### Release status
+
+- The `v0.1.0` attempt stopped at Inspect before any candidate, Cargo upload or GitHub Release was created. Its tag remains unchanged; the corrected release uses a new version.
+
 ## [0.1.0] - 2026-11-20
 
 Initial read-only Windows Registry query CLI, using the command and Cargo package name `regqry`.

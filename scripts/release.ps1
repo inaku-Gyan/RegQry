@@ -52,7 +52,7 @@ try {
     if (-not $localInstallInput) {
         $repo = (Invoke-ReleaseGh @('api', "repos/$Repository")) -join "`n" | ConvertFrom-Json
         if ($repo.id -ne 1462950131 -or $repo.full_name -cne $Repository -or $repo.default_branch -cne 'main') { throw 'Remote repository identity changed' }
-        if ($Action -ceq 'Inspect' -and $repo.permissions.push -ne $true) { throw 'Draft visibility requires push access; absence cannot be inferred from this listing' }
+        if ($Action -ceq 'Inspect') { Assert-ReleaseDraftVisibility $Repository $Tag }
         $remoteCommit = (Invoke-ReleaseGh @('api', "repos/$Repository/commits/$Tag", '--jq', '.sha')) -join ''
         if ($remoteCommit -cne $checkout.commit) { throw 'The actual remote tag moved or differs from the checkout' }
         $remote = Get-ReleaseRemote $Repository $Tag

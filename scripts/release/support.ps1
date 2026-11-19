@@ -88,6 +88,17 @@ function Invoke-ReleaseGh {
     $result
 }
 
+function Assert-ReleaseDraftVisibility {
+    param([string]$Repository, [string]$Tag)
+    # A Contents-write installation token can report permissions.push false.
+    # Generate-notes requires Contents write but saves no release/tag; its text
+    # is never used as release notes.
+    try {
+        $notes = (Invoke-ReleaseGh @('api', '--method', 'POST', "repos/$Repository/releases/generate-notes", '--raw-field', ('tag_name=' + $Tag))) -join "`n" | ConvertFrom-Json
+        if ($notes -isnot [pscustomobject] -or $notes.name -isnot [string] -or [string]::IsNullOrWhiteSpace($notes.name) -or $notes.body -isnot [string]) { throw 'Unexpected generate-notes response' }
+    } catch { throw ('Draft visibility requires a successful Contents write capability check; state is unknown: ' + $_.Exception.Message) }
+}
+
 function Get-ReleaseRemote {
     param([string]$Repository, [string]$Tag)
     # Listing succeeds before absence is concluded. Auth/network/404 errors never
