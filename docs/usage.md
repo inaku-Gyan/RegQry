@@ -1,6 +1,6 @@
 # Usage
 
-This development build supports readonly queries of the local live Windows registry. Formal platform and release acceptance are still pending; consult the validation status before treating development checks as support evidence.
+RegQry searches the local live Windows registry without modifying it. Consult the [validation status](https://github.com/inaku-Gyan/RegQry/blob/main/docs/validation/README.md) for executed environment checks and versioned release acceptance.
 
 ```text
 regqry [QUERY OPTIONS]

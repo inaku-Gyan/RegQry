@@ -1,24 +1,24 @@
 # Changelog
 
-User-facing changes are reviewed here before creating a release tag. This project has not published a release.
+Version entries are reviewed before their release tags. See [GitHub Releases](https://github.com/inaku-Gyan/RegQry/releases) and [crates.io](https://crates.io/crates/regqry) for publication availability.
 
 ## Unreleased
 
+## [0.1.0] - 2026-11-20
+
+Initial read-only Windows Registry query CLI, using the command and Cargo package name `regqry`.
+
 ### Added
 
-- Windows-only Rust project foundation, fixed toolchain, query argument validation, and development checks.
-- Local readonly registry queries with relative multi-root filters, regex/glob/data/type/time conditions, explicit views, streaming grouped previews, cancellation and incomplete-search diagnostics.
-- Constructed query/error tests and a private application-hive test for lossless native reads, long names, large values and unknown types.
-- Native static-CRT development test bundles with file identities, DLL inspection, Cargo-free relocation checks and controlled rejection probes.
-- An opt-in disposable-VM suite for real roots, physical registry views, minimum permissions and registry links, with separate setup/query tokens and recorded fixture lifecycles.
-- Native private-hive checks for changing/deleted values, retry exhaustion, malformed UTF-16 names and saved data; real closed-pipe write/flush checks in the query/output path.
-- Isolated console/process-control probes and opt-in VM cases for actual CLI streaming, Ctrl+C, closed stdout pipes, long values and first-result/working-set measurements.
-- Actual cmd/Windows PowerShell 5.1/PowerShell 7 invocation and encoding checks, with separate owned-VM query cases and a manual terminal acceptance record template.
-- Fixed deep/wide scaling fixtures and exact-result VM measurement, plus an explicit aggregate-only live-query observer with no retained registry contents.
-- Native user/test ZIP asset construction with production/test-specific cargo-about materials, original copyright texts, Rust standard-library notices and archive/relocation checks.
-- Tag-driven draft/candidate freezing, formal evidence validation, strict Cargo archive checks, OIDC-only CI publication, native registry installation and state-aware release recovery tooling; actual publication and platform acceptance remain pending.
-- Actions-only standard-user acceptance on native x64 Server and ARM64 Windows 11, repeated with independently installed executables; original source/registry evidence ZIPs and job provenance are preserved for release recovery. Minimum/clean clients and human terminal/physical-keyboard checks remain explicitly unexecuted and deferred.
+- Direct `regqry [QUERY OPTIONS]` searches, short/full help and version output. No arguments display help without querying the registry.
+- Multiple arbitrary search roots, relative key-path matching and explicit 32/64-bit views. Defaults search descendants of HKCU and HKLM in all supported views.
+- Field-specific regex/glob filters for keys, value names and data; raw hexadecimal and empty/missing-data conditions; value-type inclusion/exclusion and key modification-time bounds. Repeated conditions within a field use OR; field groups use AND, with type exclusions applied globally.
+- Explicit environment-expanded matching for REG_EXPAND_SZ, based on one process-environment snapshot. Saved bytes remain unchanged.
+- Lossless native reads and grouped UTF-8 results containing full key/value identities, type information, raw byte counts and clearly marked data previews. Missing default values, empty data and malformed saved representations remain distinct.
+- Streaming execution, Ctrl+C cancellation and partial-failure diagnostics. Exit codes are 0 for complete matches, 1 for complete zero matches, 2 for invalid input/incomplete execution and 130 for cancellation.
+- Native x64/ARM64 Windows MSVC ZIP distribution and Windows-only Cargo installation through the versioned release workflow. Packages include license materials; releases include SHA-256 checksums and original acceptance records.
 
-### Fixed
+### Limitations
 
-- Grow registry name buffers independently of failed enumeration output, and observe cancellation before allocating a larger retry buffer.
+- Queries are read-only and use the live registry without a consistent snapshot or guaranteed ordering. A search root's own key and values are excluded. Editing, TUI interaction and additional output formats are deferred.
+- Executables are unsigned. Compatibility targets are x64 Windows 10 22H2 / Windows 11 and ARM64 Windows 11 24H2 or later. Automated acceptance uses GitHub-hosted native x64 Windows Server and ARM64 Windows 11; minimum/clean clients, visible terminal layout and physical-keyboard checks remain unexecuted and deferred. See the [compatibility notes](docs/compatibility.md) and [validation records](https://github.com/inaku-Gyan/RegQry/blob/main/docs/validation/README.md).
