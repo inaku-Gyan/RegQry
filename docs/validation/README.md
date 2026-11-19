@@ -1,5 +1,7 @@
 # Validation status
 
+The first [v0.1.0 tag attempt](https://github.com/inaku-Gyan/RegQry/actions/runs/44608849190) stopped at Inspect before creating a candidate or publishing either channel. The [installation-token diagnosis and correction](release-draft-access-2026-11-20.md) records actual permission controls and the new 0.1.1 preparation. The original tag remains unchanged.
+
 No frozen-candidate release acceptance or channel publication has passed yet. Actual native hosted development checks, including standard-user registry queries and independent source installations, have passed. This index distinguishes executed development evidence, required candidate checks and deferred client/manual coverage. Older dated records retain the requirements and unexecuted state at that point; current policy is the [hosted acceptance contract](../hosted-acceptance.md).
 
 Local development checks are recorded in [foundation checks, 2026-11-19](foundation-2026-11-19.md).

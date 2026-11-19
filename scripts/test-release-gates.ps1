@@ -17,6 +17,7 @@ $global:RegQryReleaseModel.remote = $null; $global:RegQryReleaseModel.remoteFile
 $global:RegQryReleaseModel.remoteFailure = $false; $global:RegQryReleaseModel.downloadCorruption = $false; $global:RegQryReleaseModel.uploadFailure = $false
 $global:RegQryReleaseModel.checkoutFailure = ''; $global:RegQryReleaseModel.packageVersion = '0.1.0'
 $global:RegQryReleaseModel.httpRequests = 0; $global:RegQryReleaseModel.settingsReads = 0
+$global:RegQryReleaseModel.notesRequests = 0
 $global:RegQryReleaseModel.originalArtifacts = @{}
 
 function Invoke-WebRequest {
@@ -58,7 +59,15 @@ function gh {
     if ($global:RegQryReleaseModel.remoteFailure) { $global:LASTEXITCODE = 1; return }
     if ($arguments[0] -ceq 'api') {
         $endpoint = @($arguments | Where-Object { $_ -like 'repos/*' })[0]
-        if ($endpoint -ceq 'repos/inaku-Gyan/RegQry') { '{"id":1462950131,"full_name":"inaku-Gyan/RegQry","default_branch":"main","permissions":{"admin":true,"push":' + $(if ($global:RegQryReleaseModel.noPushVisibility) { 'false' } else { 'true' }) + '}}'; return }
+        if ($endpoint -ceq 'repos/inaku-Gyan/RegQry') { '{"id":1462950131,"full_name":"inaku-Gyan/RegQry","default_branch":"main","permissions":{"admin":true,"push":' + $(if ($global:RegQryReleaseModel.noPushVisibility -or $global:RegQryReleaseModel.installationToken) { 'false' } else { 'true' }) + '}}'; return }
+        if ($endpoint -ceq 'repos/inaku-Gyan/RegQry/releases/generate-notes') {
+            if ($arguments -cnotcontains 'POST' -or $arguments -cnotcontains 'tag_name=v0.1.0') { throw 'Capability check did not use the exact tagged generate-notes request' }
+            $global:RegQryReleaseModel.notesRequests++
+            if ($global:RegQryReleaseModel.noPushVisibility) { $global:LASTEXITCODE = 1; return }
+            if ($global:RegQryReleaseModel.malformedNotes) { '{"message":"not a permission proof"}'; return }
+            '{"name":"Synthetic capability check only","body":"Not saved or used as release notes."}'
+            return
+        }
         if ($endpoint -match '/commits/') { $global:RegQryReleaseModel.fakeCommit; return }
         if ($endpoint -match '/releases\?') { if ($global:RegQryReleaseModel.remote) { '[[' + ($global:RegQryReleaseModel.remote | ConvertTo-Json -Depth 40 -Compress) + ']]' } else { '[[]]' }; return }
         if ($endpoint -match '/assets\?') { '[' + (ConvertTo-Json -InputObject @($global:RegQryReleaseModel.remote.assets) -Depth 40 -Compress) + ']'; return }
@@ -271,6 +280,17 @@ try {
     Test-ReleaseCase 'candidate validates both native model identities' { Assert-ReleaseCandidate $candidate 'v0.1.0' $global:RegQryReleaseModel.fakeCommit }
     Test-ReleaseCase 'frozen rerun performs no writes or builds' { $before = $global:RegQryReleaseModel.writes; & $modelScript -Action Freeze -Tag 'v0.1.0' -InputDirectory $buildRoot -OutputDirectory (Join-Path $fixtureRoot 'freeze-retry') | Out-Null; if ($global:RegQryReleaseModel.writes -ne $before) { throw 'Frozen retry mutated assets' } }
     Test-ReleaseCase 'dispatch reads original candidate without rebuilding' { $env:GITHUB_EVENT_NAME = 'workflow_dispatch'; try { & $modelScript -Action Inspect -Tag 'v0.1.0' -OutputDirectory (Join-Path $fixtureRoot 'inspect') | Out-Null } finally { Remove-Item Env:\GITHUB_EVENT_NAME }; if ($global:RegQryReleaseModel.writes -ne 7) { throw 'Recovery changed the assets' } }
+    Test-ReleaseCase 'installation token with Contents write is accepted despite push false' {
+        $global:RegQryReleaseModel.installationToken = $true; $before = $global:RegQryReleaseModel.writes; $requests = $global:RegQryReleaseModel.notesRequests
+        try { & $modelScript -Action Inspect -Tag 'v0.1.0' -OutputDirectory (Join-Path $fixtureRoot 'installation-token') | Out-Null } finally { $global:RegQryReleaseModel.installationToken = $false }
+        if ($global:RegQryReleaseModel.writes -ne $before) { throw 'Capability check saved a release or changed assets' }
+        if ($global:RegQryReleaseModel.notesRequests -ne ($requests + 1)) { throw 'Inspect skipped the actual write-capability check' }
+    }
+    Test-ReleaseCase 'malformed capability response cannot establish draft visibility' {
+        $global:RegQryReleaseModel.malformedNotes = $true; $before = $global:RegQryReleaseModel.writes
+        try { Assert-Rejected { & $modelScript -Action Inspect -Tag 'v0.1.0' -OutputDirectory (Join-Path $fixtureRoot 'malformed-visibility') } 'Draft visibility' } finally { $global:RegQryReleaseModel.malformedNotes = $false }
+        if ($global:RegQryReleaseModel.writes -ne $before) { throw 'Malformed capability response caused a write' }
+    }
     Test-ReleaseCase 'missing push visibility is not interpreted as absence of drafts' {
         $global:RegQryReleaseModel.noPushVisibility = $true; $before = $global:RegQryReleaseModel.writes
         try { Assert-Rejected { & $modelScript -Action Inspect -Tag 'v0.1.0' -OutputDirectory (Join-Path $fixtureRoot 'invisible-draft') } 'Draft visibility' } finally { $global:RegQryReleaseModel.noPushVisibility = $false }

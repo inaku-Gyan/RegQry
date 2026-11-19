@@ -14,7 +14,7 @@ cargo install --version 0.9.3 --locked --features cli cargo-about
 ./scripts/check.ps1 -Check package
 # Adapt the source path if CARGO_TARGET_DIR is set.
 ./scripts/build-release-assets.ps1 `
-  -SourceArchive target/package/regqry-0.1.0.crate `
+  -SourceArchive target/package/regqry-0.1.1.crate `
   -OutputDirectory artifacts/native-assets
 ./scripts/check-release-assets.ps1 `
   -BuildReport artifacts/native-assets/build.json `
@@ -32,9 +32,9 @@ For each target, `build.json` records the source archive, original source/lock/c
 
 | File | Purpose |
 | --- | --- |
-| `regqry-0.1.0.crate` | Preserved original Cargo source archive |
-| `regqry-v0.1.0-TARGET.zip` | User directory: executable, README/changelog/license, linked public docs, production notices and identity/PE records |
-| `tests/regqry-v0.1.0-tests-TARGET.zip` | Actual CLI and all native harnesses/runners, test notices and complete test/PE/file inventory |
+| `regqry-0.1.1.crate` | Preserved original Cargo source archive |
+| `regqry-v0.1.1-TARGET.zip` | User directory: executable, README/changelog/license, linked public docs, production notices and identity/PE records |
+| `tests/regqry-v0.1.1-tests-TARGET.zip` | Actual CLI and all native harnesses/runners, test notices and complete test/PE/file inventory |
 | `build.json` | Native build inputs and original asset byte identities |
 | `user-license-report/`, `tests/test-license-report/` | Raw cargo-about output, Cargo graph and collection result |
 
@@ -46,7 +46,7 @@ CI builds and checks these native assets on its two hosted architectures and pre
 
 ## Tag workflow and frozen candidate
 
-The single [release.yml](../.github/workflows/release.yml) uses tag push for normal releases and dispatch on that same existing tag only for recovery. `release.ps1 -Action Inspect` first verifies clean HEAD/tag, actual remote tag commit, ancestry in fetched origin/main, locked Cargo metadata and one dated `## [VERSION] - YYYY-MM-DD` changelog entry. The 0.1.0 entry is prepared for review; the entry alone does not establish candidate acceptance or publication. The release scripts do not create or move Git tags.
+The single [release.yml](../.github/workflows/release.yml) uses tag push for normal releases and dispatch on that same existing tag only for recovery. `release.ps1 -Action Inspect` first verifies clean HEAD/tag, actual remote tag commit, ancestry in fetched origin/main, locked Cargo metadata and one dated `## [VERSION] - YYYY-MM-DD` changelog entry. The 0.1.1 entry is prepared for review; the entry alone does not establish candidate acceptance or publication. The release scripts do not create or move Git tags. The first v0.1.0 attempt stopped at Inspect without a candidate or public channel; its tag remains unchanged, and the corrected code uses 0.1.1.
 
 Fresh runs reuse CI, preserve one verified x64 Cargo archive, then build on both native architectures. `build-release-candidate.ps1` selects the installed MSVC environment through vswhere/vcvarsall, pins Cargo's actual linker path, and records linker/Cargo binary hashes, selected SDK/UCRT versions and representative SDK import-library hashes. These identify actual selected tools, not only a dumpbin version. Existing package checks still validate the original source, static CRT, license materials and relocated assets.
 
@@ -61,19 +61,19 @@ The same tag run automatically starts [frozen-candidate acceptance](../.github/w
 Normal failure recovery uses rerun failed jobs. A manual dispatch is available only at an existing frozen tag:
 
 ```powershell
-gh workflow run release.yml --ref v0.1.0
+gh workflow run release.yml --ref v0.1.1
 ```
 
 Dispatch requires the actual existing tag ref and a frozen candidate. It cannot start a new release or regenerate ZIPs. Main must already contain the workflow definition. An existing valid source/registry acceptance ZIP skips that stage's execution and is reused byte for byte. See the evidence guide for separate pre-Cargo source-archive and post-Cargo registry-install records; a missing latter record can leave Cargo public while GitHub remains a draft.
 
-Draft [listing visibility requires push access](https://docs.github.com/en/rest/releases/releases#list-releases). Inspect therefore has contents write for visibility, checks the returned push permission and performs only reads. A filtered read-only listing never means that a candidate is absent. Acceptance workers consume current-run artifacts with original candidate/archive hashes, retain contents read, and clear GitHub/Cargo tokens before account creation, source compilation or fixture queries. Collect/staging jobs alone receive draft write visibility and actions read for actual job provenance. Reusable workflows receive explicit inputs and their own environment; [caller workflow env is not inherited](https://docs.github.com/en/actions/reference/workflows-and-actions/reusing-workflow-configurations).
+Draft [listing visibility requires push access](https://docs.github.com/en/rest/releases/releases#list-releases). Inspect therefore has contents write for visibility and verifies that capability using the official [generate-notes endpoint](https://docs.github.com/en/rest/releases/releases#generate-release-notes-content-for-a-release). That endpoint requires Contents write and saves neither notes nor a Release. Its text is discarded; the reviewed CHANGELOG remains the release body. An installation token can return `permissions.push: false` even with Contents write, so that user-role flag is not the capability check. Any failed or malformed capability response stops before listing absence is interpreted. A filtered read-only listing never means that a candidate is absent. Acceptance workers consume current-run artifacts with original candidate/archive hashes, retain contents read, and clear GitHub/Cargo tokens before account creation, source compilation or fixture queries. Collect/staging jobs alone receive draft write visibility and actions read for actual job provenance. Reusable workflows receive explicit inputs and their own environment; [caller workflow env is not inherited](https://docs.github.com/en/actions/reference/workflows-and-actions/reusing-workflow-configurations).
 
 The first new crates.io package is bootstrapped locally on Windows only after candidate acceptance. CI always uses official OIDC Trusted Publishing, with no API-token fallback. Release promotion publishes/verifies Cargo first, including the exact registry archive/index hash and both native registry installations, then makes the same GitHub draft public. Preflight repeated Cargo packaging and the actual uploaded registry archive must exactly match the frozen candidate SHA-256. A source-equivalent archive is insufficient.
 
 For the first real version, use the accepted candidate and clean tag on native x64 Windows, Rust/Cargo 1.100.0, and the standard local Cargo credential mechanism. Do not put the short-lived bootstrap credential in command arguments, repository files or CI. The script verifies the candidate's Cargo binary/compiler and repeated archive before publishing:
 
 ```powershell
-./scripts/release.ps1 -Action CargoPublish -Tag v0.1.0 -LocalBootstrap `
+./scripts/release.ps1 -Action CargoPublish -Tag v0.1.1 -LocalBootstrap `
   -OutputDirectory artifacts/local-bootstrap
 ```
 

@@ -85,7 +85,7 @@ jobs:
           $metadata = $metadataText | ConvertFrom-Json
           $package = @($metadata.packages | Where-Object name -eq 'regqry')[0]
           $source = Join-Path $metadata.target_directory ('package/regqry-' + $package.version + '.crate')
-          ./scripts/build-release-assets.ps1 -SourceArchive $source -OutputDirectory artifacts/native-assets -Target '${{ matrix.target }}'
+          ./scripts/build-release-candidate.ps1 -SourceArchive $source -OutputDirectory artifacts/native-assets -Target '${{ matrix.target }}'
           $assets = Get-Content artifacts/native-assets/build.json -Raw -Encoding utf8 | ConvertFrom-Json
           ./scripts/check-release-assets.ps1 -BuildReport artifacts/native-assets/build.json -ReportDirectory artifacts/native-asset-check -PowerShell7 (Join-Path $PSHOME 'pwsh.exe')
           ./scripts/test-release-asset-gates.ps1 -BuildReport artifacts/native-assets/build.json -ReportDirectory artifacts/native-asset-gates
