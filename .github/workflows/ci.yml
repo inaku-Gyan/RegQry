@@ -117,6 +117,52 @@ jobs:
             artifacts/release-gates/**
           if-no-files-found: warn
 
+  hosted-registry:
+    needs: native
+    if: github.event_name != 'schedule' && !inputs.skip_native
+    name: Ordinary-user registry ${{ matrix.target }}
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2025-vs2026
+            target: x86_64-pc-windows-msvc
+          - runner: windows-11-vs2026-arm
+            target: aarch64-pc-windows-msvc
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: native-assets-${{ matrix.target }}
+          path: artifacts/inputs
+          digest-mismatch: error
+      - name: Install pinned native source-installation compiler
+        run: |
+          rustup toolchain install '1.100.0-${{ matrix.target }}' --profile minimal
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Prepare as administrator and query as a fresh ordinary user
+        env:
+          GH_TOKEN: ''
+          GITHUB_TOKEN: ''
+        run: ./scripts/check-hosted-registry.ps1 -GitHubHostedVm -InputDirectory artifacts/inputs/native-assets -ReportDirectory artifacts/hosted-registry -PowerShell7 (Join-Path $PSHOME 'pwsh.exe')
+      - name: Preserve actual roles, fixtures and results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: hosted-registry-${{ matrix.target }}
+          path: artifacts/hosted-registry/**
+          if-no-files-found: warn
+
   dependencies:
     runs-on: windows-2025-vs2026
     env:
