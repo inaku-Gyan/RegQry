@@ -98,9 +98,10 @@ fn private_fixture_collision_preserves_existing_data_and_marker() {
         );
         assert_marker(&key, &[1; 32]);
         assert_eq!(raw(&key, "Payload"), before);
-        // The same helper handles raw types and malformed UTF-16 without touching a global hive.
-        set(&key, OsStr::new("Odd"), REG_SZ, &[0x41]);
-        assert_eq!(raw(&key, "Odd"), (REG_SZ, vec![0x41]));
+        // Keep Win32 string-writing preconditions here. Deliberately malformed
+        // strings use NtSetValueKey in the internal native data-layout tests.
+        set(&key, OsStr::new("Raw"), 0xF00D, &[0x41]);
+        assert_eq!(raw(&key, "Raw"), (0xF00D, vec![0x41]));
         assert!(create(&hive, OsStr::new("..\\Escape"), 0, None).is_err());
     }
     temp.close().unwrap();

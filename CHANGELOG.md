@@ -11,3 +11,8 @@ User-facing changes are reviewed here before creating a release tag. This projec
 - Constructed query/error tests and a private application-hive test for lossless native reads, long names, large values and unknown types.
 - Native static-CRT development test bundles with file identities, DLL inspection, Cargo-free relocation checks and controlled rejection probes.
 - An opt-in disposable-VM suite for real roots, physical registry views, minimum permissions and registry links, with separate setup/query tokens and preserved rollback requirements.
+- Native private-hive checks for changing/deleted values, retry exhaustion, malformed UTF-16 names and saved data; real closed-pipe write/flush checks in the query/output path.
+
+### Fixed
+
+- Grow registry name buffers independently of failed enumeration output, and observe cancellation before allocating a larger retry buffer.

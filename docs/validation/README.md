@@ -10,13 +10,15 @@ Portable test tooling is recorded in [portable bundle checks](portable-bundle-20
 
 The explicit two-phase global suite and its unexecuted VM boundary are recorded in [VM tooling checks](vm-tools-2026-11-19.md).
 
+Private-hive mutation, malformed names/data and real closed-pipe output are recorded in [native read stability checks](native-read-2026-11-19.md).
+
 | Requirement | Current status |
 | --- | --- |
 | Native x64 and ARM64 hosted checks | Workflow implemented; remote execution pending |
 | x64 Windows 10 22H2 ordinary user and clean system | Missing environment |
 | Representative x64 Windows 11 client | Product acceptance not run |
 | Native ARM64 Windows 11 24H2 ordinary user and clean system | Missing environment |
-| Actual 32/64 view, ACL, links, long/malformed values | Opt-in ROOT/view/ACL/link VM suite implemented, not run; private-hive subset checked; native malformed/race cases pending |
+| Actual 32/64 view, ACL, links, long/malformed values | Opt-in ROOT/view/ACL/link VM suite implemented, not run; x64 private-hive long/malformed data and controlled changes checked; ARM64 execution pending |
 | Three shells on each formal system; 80/120-column representative console/Terminal runs | Product acceptance not run |
 | Portable candidate test bundles and DLL checks | Development builder, x64 DLL checks and relocated tests passed; frozen candidates, ARM64 and clean minimum systems pending |
 | Candidate source/ZIP hashes and repeatable Cargo archive | Release implementation pending |

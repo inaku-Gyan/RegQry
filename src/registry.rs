@@ -15,6 +15,9 @@ use windows_sys::Win32::{
 };
 use winreg::RegKey;
 
+#[cfg(test)]
+mod tests;
+
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub(crate) enum View {
     V32,
@@ -233,11 +236,14 @@ pub(crate) struct WindowsSource<'a> {
 }
 impl WindowsSource<'_> {
     fn check_cancel(&self) -> io::Result<()> {
-        if self.cancelled.load(AtomicOrdering::Relaxed) {
-            Err(io::Error::new(io::ErrorKind::Interrupted, "cancelled"))
-        } else {
-            Ok(())
-        }
+        check_cancel(self.cancelled)
+    }
+}
+fn check_cancel(cancelled: &AtomicBool) -> io::Result<()> {
+    if cancelled.load(AtomicOrdering::Relaxed) {
+        Err(io::Error::new(io::ErrorKind::Interrupted, "cancelled"))
+    } else {
+        Ok(())
     }
 }
 fn grow<T: Clone + Default>(buffer: &mut Vec<T>, required: usize) -> io::Result<()> {
@@ -257,6 +263,132 @@ fn grow<T: Clone + Default>(buffer: &mut Vec<T>, required: usize) -> io::Result<
 fn exhausted() -> io::Error {
     io::Error::other("Win32 234: registry buffer changed through eight retries")
 }
+
+enum BufferRead<T> {
+    Done(T),
+    More(usize),
+}
+
+// Share the retry/cancellation boundary across the three raw operations. Each
+// attempt supplies the current initialized capacity; failed output is discarded.
+fn buffered<T: Clone + Default, R>(
+    cancelled: &AtomicBool,
+    initial: usize,
+    mut operation: impl FnMut(&mut [T]) -> io::Result<BufferRead<R>>,
+) -> io::Result<(Vec<T>, R)> {
+    check_cancel(cancelled)?;
+    let mut buffer = Vec::new();
+    grow(&mut buffer, initial)?;
+    for attempt in 0..=8 {
+        check_cancel(cancelled)?;
+        match operation(&mut buffer)? {
+            BufferRead::Done(value) => return Ok((buffer, value)),
+            BufferRead::More(required) => {
+                check_cancel(cancelled)?;
+                if attempt == 8 {
+                    return Err(exhausted());
+                }
+                grow(&mut buffer, required)?;
+            }
+        }
+    }
+    unreachable!()
+}
+
+fn enum_key(
+    key: &RegKey,
+    index: u32,
+    name: &mut [u16],
+) -> io::Result<BufferRead<Option<(usize, u64)>>> {
+    let mut length = name.len() as u32;
+    let mut modified = FILETIME {
+        dwLowDateTime: 0,
+        dwHighDateTime: 0,
+    };
+    // SAFETY: key owns a live handle, name is writable for length units, and optional outputs are null.
+    let code = unsafe {
+        Registry::RegEnumKeyExW(
+            key.raw_handle(),
+            index,
+            name.as_mut_ptr(),
+            &mut length,
+            std::ptr::null(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            &mut modified,
+        )
+    };
+    match code {
+        ERROR_SUCCESS if (length as usize) < name.len() => Ok(BufferRead::Done(Some((
+            length as usize,
+            (u64::from(modified.dwHighDateTime) << 32) | u64::from(modified.dwLowDateTime),
+        )))),
+        ERROR_SUCCESS => Err(io::Error::other("invalid returned key name length")),
+        ERROR_NO_MORE_ITEMS => Ok(BufferRead::Done(None)),
+        // The name-length output is only specified on success. Grow independently
+        // rather than treating a failed call's output as a capacity hint.
+        ERROR_MORE_DATA => Ok(BufferRead::More(0)),
+        code => Err(io::Error::from_raw_os_error(code as i32)),
+    }
+}
+
+fn enum_value(key: &RegKey, index: u32, name: &mut [u16]) -> io::Result<BufferRead<Option<usize>>> {
+    let mut length = name.len() as u32;
+    // SAFETY: name is writable for length units; no data/type outputs are requested.
+    let code = unsafe {
+        Registry::RegEnumValueW(
+            key.raw_handle(),
+            index,
+            name.as_mut_ptr(),
+            &mut length,
+            std::ptr::null(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+        )
+    };
+    match code {
+        ERROR_SUCCESS if (length as usize) < name.len() => {
+            Ok(BufferRead::Done(Some(length as usize)))
+        }
+        ERROR_SUCCESS => Err(io::Error::other("invalid returned value name length")),
+        ERROR_NO_MORE_ITEMS => Ok(BufferRead::Done(None)),
+        ERROR_MORE_DATA => Ok(BufferRead::More(0)),
+        code => Err(io::Error::from_raw_os_error(code as i32)),
+    }
+}
+
+fn query_value(
+    key: &RegKey,
+    name: &OsStr,
+    bytes: &mut [u8],
+) -> io::Result<BufferRead<(u32, usize)>> {
+    let name: Vec<_> = name.encode_wide().chain(Some(0)).collect();
+    let mut size = bytes.len() as u32;
+    let mut kind = 0;
+    // SAFETY: name is NUL-terminated, bytes is writable for size bytes, and key owns the handle.
+    let code = unsafe {
+        Registry::RegQueryValueExW(
+            key.raw_handle(),
+            name.as_ptr(),
+            std::ptr::null(),
+            &mut kind,
+            bytes.as_mut_ptr(),
+            &mut size,
+        )
+    };
+    match code {
+        ERROR_SUCCESS if size as usize <= bytes.len() => {
+            Ok(BufferRead::Done((kind, size as usize)))
+        }
+        ERROR_SUCCESS => Err(io::Error::other("invalid returned value data length")),
+        // These ordinary roots provide a documented required-byte count; the
+        // special performance-data roots, whose count is undefined, are rejected.
+        ERROR_MORE_DATA => Ok(BufferRead::More(size as usize)),
+        code => Err(io::Error::from_raw_os_error(code as i32)),
+    }
+}
+
 impl Source for WindowsSource<'_> {
     type Key = RegKey;
     fn open_root(&self, root: &Root, view: View) -> io::Result<RegKey> {
@@ -290,113 +422,20 @@ impl Source for WindowsSource<'_> {
         )
     }
     fn child_at(&self, key: &RegKey, index: u32) -> io::Result<Option<Child>> {
-        let mut name = Vec::<u16>::new();
-        grow(&mut name, 256)?;
-        for attempt in 0..=8 {
-            self.check_cancel()?;
-            let mut length = name.len() as u32;
-            let mut modified = FILETIME {
-                dwLowDateTime: 0,
-                dwHighDateTime: 0,
-            };
-            // SAFETY: key owns a live handle, name is writable for length units, and optional outputs are null.
-            let code = unsafe {
-                Registry::RegEnumKeyExW(
-                    key.raw_handle(),
-                    index,
-                    name.as_mut_ptr(),
-                    &mut length,
-                    std::ptr::null(),
-                    std::ptr::null_mut(),
-                    std::ptr::null_mut(),
-                    &mut modified,
-                )
-            };
-            match code {
-                ERROR_SUCCESS => {
-                    if length as usize >= name.len() {
-                        return Err(io::Error::other("invalid returned key name length"));
-                    }
-                    return Ok(Some(Child {
-                        name: OsString::from_wide(&name[..length as usize]),
-                        modified: (u64::from(modified.dwHighDateTime) << 32)
-                            | u64::from(modified.dwLowDateTime),
-                    }));
-                }
-                ERROR_NO_MORE_ITEMS => return Ok(None),
-                ERROR_MORE_DATA if attempt < 8 => grow(&mut name, length as usize + 1)?,
-                ERROR_MORE_DATA => return Err(exhausted()),
-                code => return Err(io::Error::from_raw_os_error(code as i32)),
-            }
-        }
-        unreachable!()
+        let (name, entry) = buffered(self.cancelled, 256, |buffer| enum_key(key, index, buffer))?;
+        Ok(entry.map(|(length, modified)| Child {
+            name: OsString::from_wide(&name[..length]),
+            modified,
+        }))
     }
     fn value_at(&self, key: &RegKey, index: u32) -> io::Result<Option<OsString>> {
-        let mut name = Vec::<u16>::new();
-        grow(&mut name, 256)?;
-        for attempt in 0..=8 {
-            self.check_cancel()?;
-            let mut length = name.len() as u32;
-            // SAFETY: name is writable for length units; no data/type outputs are requested.
-            let code = unsafe {
-                Registry::RegEnumValueW(
-                    key.raw_handle(),
-                    index,
-                    name.as_mut_ptr(),
-                    &mut length,
-                    std::ptr::null(),
-                    std::ptr::null_mut(),
-                    std::ptr::null_mut(),
-                    std::ptr::null_mut(),
-                )
-            };
-            match code {
-                ERROR_SUCCESS => {
-                    if length as usize >= name.len() {
-                        return Err(io::Error::other("invalid returned value name length"));
-                    }
-                    return Ok(Some(OsString::from_wide(&name[..length as usize])));
-                }
-                ERROR_NO_MORE_ITEMS => return Ok(None),
-                ERROR_MORE_DATA if attempt < 8 => grow(&mut name, length as usize + 1)?,
-                ERROR_MORE_DATA => return Err(exhausted()),
-                code => return Err(io::Error::from_raw_os_error(code as i32)),
-            }
-        }
-        unreachable!()
+        let (name, entry) = buffered(self.cancelled, 256, |buffer| enum_value(key, index, buffer))?;
+        Ok(entry.map(|length| OsString::from_wide(&name[..length])))
     }
     fn read(&self, key: &RegKey, name: &OsStr) -> io::Result<crate::value::RawValue> {
-        let name_wide: Vec<_> = name.encode_wide().chain(Some(0)).collect();
-        let mut bytes = Vec::<u8>::new();
-        grow(&mut bytes, 256)?;
-        for attempt in 0..=8 {
-            self.check_cancel()?;
-            let mut size = bytes.len() as u32;
-            let mut kind = 0;
-            // SAFETY: name is NUL-terminated, bytes is writable for size bytes, and key owns the handle.
-            let code = unsafe {
-                Registry::RegQueryValueExW(
-                    key.raw_handle(),
-                    name_wide.as_ptr(),
-                    std::ptr::null(),
-                    &mut kind,
-                    bytes.as_mut_ptr(),
-                    &mut size,
-                )
-            };
-            match code {
-                ERROR_SUCCESS => {
-                    if size as usize > bytes.len() {
-                        return Err(io::Error::other("invalid returned value data length"));
-                    }
-                    bytes.truncate(size as usize);
-                    return Ok(crate::value::RawValue::new(name.to_owned(), kind, bytes));
-                }
-                ERROR_MORE_DATA if attempt < 8 => grow(&mut bytes, size as usize)?,
-                ERROR_MORE_DATA => return Err(exhausted()),
-                code => return Err(io::Error::from_raw_os_error(code as i32)),
-            }
-        }
-        unreachable!()
+        let (mut bytes, (kind, size)) =
+            buffered(self.cancelled, 256, |buffer| query_value(key, name, buffer))?;
+        bytes.truncate(size);
+        Ok(crate::value::RawValue::new(name.to_owned(), kind, bytes))
     }
 }

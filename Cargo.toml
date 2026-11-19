@@ -29,4 +29,4 @@ ctrlc = "3.5.3"
 [target.'cfg(windows)'.dev-dependencies]
 assert_cmd = "2.2.2"
 tempfile = "3.27.0"
-windows-sys = { version = "0.61.2", features = ["Win32_Security_Authorization"] }
+windows-sys = { version = "0.61.2", features = ["Win32_Security_Authorization", "Wdk_System_Registry"] }

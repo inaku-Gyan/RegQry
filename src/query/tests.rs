@@ -6,6 +6,8 @@ use crate::{
 };
 use std::{cell::Cell, collections::BTreeMap};
 
+mod native;
+
 fn plan(args: &[&str]) -> Plan {
     let matches = cli::command()
         .try_get_matches_from(std::iter::once("regqry").chain(args.iter().copied()))
@@ -573,6 +575,41 @@ fn output_is_streamed_and_cancel_or_write_failure_stops_more_reads() {
         assert_eq!(summary.code(), expected);
         assert_eq!(sink.count, 1);
         assert_eq!(source.child_reads.get(), 1);
+    }
+}
+
+#[test]
+fn a_closed_windows_pipe_on_write_or_flush_stops_the_query_with_status_two() {
+    use std::io::{BufWriter, Write, pipe};
+    for buffered in [false, true] {
+        let (consumer, producer) = pipe().unwrap();
+        drop(consumer);
+        // The OS reader is closed. A large BufWriter postpones the same real
+        // broken-pipe error until Output's per-record flush.
+        let writer: Box<dyn Write> = if buffered {
+            Box::new(BufWriter::with_capacity(65536, producer))
+        } else {
+            Box::new(producer)
+        };
+        let source = Memory::fixture();
+        let mut stderr = Vec::new();
+        let summary = execute(
+            &plan(&["--key-root=HKCU", "--view=64"]),
+            &Environment::from_entries(vec![]),
+            &source,
+            &mut Output::new(writer, &mut stderr),
+            &AtomicBool::new(false),
+        );
+        assert_eq!(summary.code(), 2);
+        assert!(summary.output_failed && summary.incomplete);
+        assert_eq!(source.child_reads.get(), 1);
+        let diagnostic = String::from_utf8(stderr).unwrap();
+        assert!(
+            diagnostic.contains("write result")
+                && diagnostic.contains("Win32 ")
+                && diagnostic.contains("search incomplete"),
+            "{diagnostic}"
+        );
     }
 }
 
