@@ -156,6 +156,14 @@ GitHub 的 artifact 上传工具提供 artifact ID / URL / SHA-256 digest 与保
 
 **联网事实：** 正常检查可刷新公告 DB / crate 索引；离线结果受已缓存公告和 yanked 索引时效限制。0.21.0 统一用 `--offline` 禁止抓取 crate、advisory DB 和 std-replacement 数据；`--frozen` 等于 locked + offline。源码中旧的 `check --disable-fetch` 已移除，在线书个别段落仍引用旧旗标，不能照抄。0.21 的 `fetch` 子命令接受 `db / index / std-replacement / all`，不是 `fetch advisories`。`maximum-db-staleness` 默认 90 天，在禁止抓取时限制数据库陈旧度，不等于一次离线 pass 已涵盖当天新公告。[0.21 的 main / check / fetch / advisories 源码][p-deny]、[在线 common 说明][deny-common]
 
+**到期 ignore 的精确语义：** 0.21.0 的 `src/advisories/diags.rs` 优先使用 `[advisories].ignore` 单条对象的 `expiry`，否则采用全局 `[advisories].ignore-expiry`；可写 `YYYY-MM-DD`，或自公告发布日期起算的时长。`check.rs` 传入当前 UTC 日期；当 `date > deadline` 时不再忽略，发出 `advisory-ignore-expired` 说明并将该公告设为 **Deny**，并非只警告到期后继续放行。日期当天仍有效。单条 `reason` / `allow` 可约束原因与允许的直接依赖者。这是 advisory ignore 的原生机制，不能推定其他许可/重复例外也都有相同自动到期功能。[0.21 发布源码][p-deny]、[0.21 release 的新增字段][deny-release]
+
+**抓取失败是否可用旧缓存通过：** 对在线 advisory DB，`git::fetch_repo` 的失败由 `AdvisoryDb::load`、`DbSet::load` 及 `check` 的 `?` 逐层传播，**不会回退旧 DB 后 pass**。但 `check.rs` 对预备的 crate/index `fetch_krates` 失败只记录 error，再继续 gather metadata；若缓存足够，不能仅靠这个日志推定最终一定非零。需要将每类抓取失败都作为阻断时，可先单独执行 `cargo deny --locked fetch db index` 并检查退出码；`fetch.rs` 对两者的错误均传播失败，再执行检查。[src/git.rs / advisories/helpers/db.rs / cargo-deny/check.rs / fetch.rs][p-deny]
+
+**yanked 新鲜度另有边界：** 0.21 的 yanked 检查使用缓存 Cargo index；`fetch index` 实际调用的是 `cargo fetch`，其公开契约是解析/下载所需依赖，并非“强制重取每个缓存 crate 的 yanked 元数据”。显式 fetch 阶段能保证该阶段返回的错误被捕获，仍不能据此声称所有索引条目已被当天强制刷新。若需这种更强保证，后续 CI 应明确缓存/刷新策略并验证，而不是只记录一次 check 退出 0。[deny 发布源码][p-deny]、[cargo fetch][cargo-fetch]
+
+**候选推论，未运行验证：** 审计 job 每次使用新的、隔离的 `CARGO_HOME`，不恢复 registry index / advisory DB 缓存，且不将 `db-path` 覆盖到旧目录；先执行并检查 `cargo deny --locked fetch db index` 的退出，再检查四项，可消除将历史本地索引/DB 回退误当最新结果的条件。普通构建 job 仍可另用缓存。这组合现有机制，不需要新写 yanked API 客户端，也不承诺任意缓存条件下的 cargo fetch 强制刷新。本次未安装/执行 deny 或跑此 job，首次实施须验证实际目录、抓取失败退出和记录的新索引/DB；远端 HTTP 缓存与抓取后的新变更亦不由本地隔离机制原子保证。[CARGO_HOME 作用][cargo-env]、[fetch 契约][cargo-fetch]、[deny 数据库/抓取实现][p-deny]
+
 **候选操作边界：** 可使用固定版本 `cargo-deny 0.21.0` 执行 `cargo deny --locked check advisories bans licenses sources`；要重放既定数据库，可先抓取、记录 DB commit/时间，再离线检查。是否允许陈旧度、哪些许可放行、重复是 warn/deny、例外期限和网络失败如何处理，都应由项目配置明确；报告没有将默认值当作已接受政策。与其重复安装 cargo-audit 做同类已知公告检查，单 deny 已有该能力，但不会覆盖全部供应链风险。[check 子命令][deny-check]、[advisories][deny-advisories]
 
 ### 5.3 固定与升级的对象
@@ -307,6 +315,7 @@ ARM64 上的 `KEY_WOW64_32KEY` 对原生 ARM64 进程指向 x86 32 位视图，`
 [cargo-check]: https://doc.rust-lang.org/cargo/commands/cargo-check.html
 [cargo-test]: https://doc.rust-lang.org/cargo/commands/cargo-test.html
 [cargo-tree]: https://doc.rust-lang.org/cargo/commands/cargo-tree.html
+[cargo-fetch]: https://doc.rust-lang.org/cargo/commands/cargo-fetch.html
 [cargo-json]: https://doc.rust-lang.org/cargo/reference/external-tools.html#artifact-messages
 [cargo-env]: https://doc.rust-lang.org/cargo/reference/environment-variables.html#environment-variables-cargo-sets-for-crates
 [rustup-overrides]: https://rust-lang.github.io/rustup/overrides.html
