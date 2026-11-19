@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "kind": "regqry-release-environment",
+  "status": "pass",
+  "recordedUtc": "2026-11-19T16:52:25.0287281Z",
+  "repository": "inaku-Gyan/RegQry",
+  "repositoryId": 1462950131,
+  "operation": "create-and-verify",
+  "environment": {
+    "id": 27887988372,
+    "node_id": "EN_kwDOVzLY888AAAAGfkDulA",
+    "name": "release",
+    "url": "https://api.github.com/repos/inaku-Gyan/RegQry/environments/release",
+    "html_url": "https://github.com/inaku-Gyan/RegQry/deployments/activity_log?environments_filter=release",
+    "created_at": "2026-11-19T16:52:21Z",
+    "updated_at": "2026-11-19T16:52:21Z",
+    "can_admins_bypass": true,
+    "protection_rules": [
+      {
+        "id": 73181038,
+        "node_id": "GA_kwDOVzLY884EXKdu",
+        "type": "branch_policy"
+      }
+    ],
+    "deployment_branch_policy": {
+      "protected_branches": false,
+      "custom_branch_policies": true
+    }
+  },
+  "deploymentPolicies": {
+    "total_count": 1,
+    "branch_policies": [
+      {
+        "id": 67445645,
+        "node_id": "MDE2OkdhdGVCcmFuY2hQb2xpY3k2NzQ0NTY0NQ==",
+        "name": "v*",
+        "type": "tag"
+      }
+    ]
+  },
+  "credentialsAdded": false
+}

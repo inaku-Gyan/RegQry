@@ -1,11 +1,13 @@
-# ---- Agent stuff ------------------------------
+# Local planning
 /.scratch/
-/docs/agents/
 
-# ---- OS ---------------------------------------
+# Build and verification output
+target/
+/artifacts/
+**/*.rs.bk
+
+# Operating system metadata
 .DS_Store
 Thumbs.db
+Desktop.ini
 *Zone.Identifier
-
-# ---- Artifacts --------------------------------
-target/

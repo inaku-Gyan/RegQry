@@ -1,0 +1,20 @@
+# Performance tooling checks, 2026-11-19
+
+Implementation branch: `test/performance-baselines`, based on `8f4cd2b55466e27166801e9c8e84ed49f045f35b`. These are native x64 development checks, not minimum-client, ARM64, clean-system or frozen-candidate acceptance. Methods and privacy boundaries are defined in [performance measurement](../performance.md).
+
+The VM preparation layer now builds a versioned fixed generator: widths 64/512/4,096, depths 16/64/256, four data types per wide node, and a payload at every chain level. Its new ignored query case measures 21 actual CLI queries twice and compares complete identity sets, including repeated/nested roots and relative matching before deduplication. The expected total is 76,416 result records across both passes. This actual CLI VM case has **not run**.
+
+The separate live observer uses six fixed readonly HKCU/HKLM queries twice under a non-elevated token. It requires explicit opt-in and complete bundle verification. It drops each result/diagnostic line after deriving counts/timing and retains no registry identities or data. Numeric Win32 fields are recognized conservatively from the terminal diagnostic field; ambiguous messages still count as diagnostics. Status `observed` and individual completeness/exit fields remain distinct from a correctness pass. Ordinary tests and CI leave this case ignored.
+
+Executed before the clean-commit archive step:
+
+- Rust/Cargo 1.100.0: rustfmt, x64 all-target Clippy with warnings denied and **47 ordinary tests** passed (34 library, six CLI, seven VM-harness helpers). All **eight opt-in cases stayed ignored**: seven disposable-VM cases and one separate live observer. ARM64 all-target Clippy compilation passed without native ARM64 execution. Records: `artifacts/performance-final-check-3/`.
+- The same full generator was created inside a private application hive. Direct widths, first/last binary indices, complete deepest payloads and explicit file cleanup passed. All 256 nested component opens succeeded. A direct 16-level full-path open succeeded, while 64/256-level full-path API calls returned Win32 87 on this build; the initial probe failed on that different operation, retained at `artifacts/performance-probe/result.json`. Component-based validation, matching product recursion, passed in the corrected probe. No global fixture was created.
+- The common stream consumer counted a constructed 4,096-record producer and measured first-result/total/peak-process memory. Group headings did not count; header-only output had no first result. Synthetic private names/data were absent from its retained summaries, and a fake Win32 mention in a target could not become a numeric code. This is CONTROL_PROBE apparatus evidence, not a registry query baseline.
+- All 13 PowerShell scripts parsed under actual Windows PowerShell 5.1. actionlint 1.7.12 accepted the CI change, retaining the existing exception for its omitted hosted ARM label. CI adds rejection probes, not live queries. Documentation links and `git diff --check` passed.
+
+No production code, dependency version/feature or Cargo.lock changed. The same-day online dependency audit from [process tooling checks](cli-processes-2026-11-19.md) still binds the unchanged dependency graph; no new audit run is claimed. The source archive and test bundle include the fixed generator, observer and method document. A watchdog kills only the isolated job's owned descendants and fails the measurement rather than passing cancellation/completion.
+
+Clean-commit package/install, repeated source hash, relocated PowerShell 5.1/7 checks, rejection probes and any actual live observations receive separate JSON identities after this commit. Raw registry contents are not collected for live reports. Nothing is pushed, merged, tagged or published by this step.
+
+Formal resources remain missing: actual disposable-VM setup/query/rollback, native ARM64, minimum/clean clients and visible terminals. Their required evidence remains a release blocker. Third-party distribution materials, user/candidate assets and the release/OIDC/recovery/channel pipeline still require implementation.

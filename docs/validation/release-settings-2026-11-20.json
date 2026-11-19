@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "kind": "regqry-release-settings",
+  "status": "pass",
+  "repository": "inaku-Gyan/RegQry",
+  "repositoryId": 1462950131,
+  "operation": "enable-and-verify",
+  "settings": {
+    "enabled": true,
+    "enforced_by_owner": false
+  },
+  "checkedAtUtc": "2026-11-19T16:39:17.8334812Z",
+  "error": null
+}

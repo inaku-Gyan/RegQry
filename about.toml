@@ -1,0 +1,22 @@
+# User executable: production and build dependencies, including transitives.
+accepted = ["MIT", "Apache-2.0", "Unicode-3.0"]
+targets = ["x86_64-pc-windows-msvc", "aarch64-pc-windows-msvc"]
+ignore-dev-dependencies = true
+ignore-build-dependencies = false
+ignore-transitive-dependencies = false
+
+# These published crates use lowercase filenames, outside the default harvest.
+# Retain Microsoft's copyright rather than synthesizing a generic MIT text.
+[windows-link.clarify]
+license = "MIT OR Apache-2.0"
+[[windows-link.clarify.files]]
+path = "license-mit"
+license = "MIT"
+checksum = "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
+
+[windows-sys.clarify]
+license = "MIT OR Apache-2.0"
+[[windows-sys.clarify.files]]
+path = "license-mit"
+license = "MIT"
+checksum = "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
