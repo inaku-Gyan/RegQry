@@ -1,4 +1,4 @@
-name: Release
+name: Release permission diagnostic
 
 on:
   push:
@@ -24,7 +24,67 @@ defaults:
     shell: pwsh
 
 jobs:
+  visibility-write:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Observe installation-token repository fields and reject a missing-tag draft request
+        shell: bash
+        run: |
+          mkdir proof
+          gh api "repos/$GITHUB_REPOSITORY" --jq '{id,full_name,permissions}' > proof/repository.json
+          gh api "repos/$GITHUB_REPOSITORY/releases" --jq '[.[]|{id,tag_name,draft}]' > proof/before.json
+          printf '%s\n' '{"draft":true}' > proof/missing-tag.json
+          set +e
+          gh api --method POST "repos/$GITHUB_REPOSITORY/releases" --include --input proof/missing-tag.json > proof/response.txt 2> proof/stderr.txt
+          status=$?
+          set -e
+          printf '%s\n' "$status" > proof/exit.txt
+          gh api "repos/$GITHUB_REPOSITORY/releases" --jq '[.[]|{id,tag_name,draft}]' > proof/after.json
+          diff -u proof/before.json proof/after.json
+          cat proof/repository.json proof/response.txt
+          test "$status" -ne 0
+          grep -E '^HTTP/[0-9.]+ 422' proof/response.txt
+          grep 'tag_name' proof/response.txt
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: visibility-write
+          path: proof/**
+          if-no-files-found: error
+
+  visibility-read:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Negative control with a read-only installation token
+        shell: bash
+        run: |
+          mkdir proof
+          gh api "repos/$GITHUB_REPOSITORY" --jq '{id,full_name,permissions}' > proof/repository.json
+          gh api "repos/$GITHUB_REPOSITORY/releases" --jq '[.[]|{id,tag_name,draft}]' > proof/before.json
+          printf '%s\n' '{"draft":true}' > proof/missing-tag.json
+          set +e
+          gh api --method POST "repos/$GITHUB_REPOSITORY/releases" --include --input proof/missing-tag.json > proof/response.txt 2> proof/stderr.txt
+          status=$?
+          set -e
+          printf '%s\n' "$status" > proof/exit.txt
+          gh api "repos/$GITHUB_REPOSITORY/releases" --jq '[.[]|{id,tag_name,draft}]' > proof/after.json
+          diff -u proof/before.json proof/after.json
+          cat proof/repository.json proof/response.txt
+          test "$status" -ne 0
+          grep -E '^HTTP/[0-9.]+ 403' proof/response.txt
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: visibility-read
+          path: proof/**
+          if-no-files-found: error
+
   inspect:
+    if: github.event_name == 'push' && github.ref_type == 'tag'
     runs-on: windows-2025-vs2026
     # Draft listing requires push visibility. This job only observes state; a
     # filtered read-only listing must never be mistaken for absence of a draft.
