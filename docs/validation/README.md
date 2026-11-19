@@ -22,6 +22,8 @@ Twelve actual readonly queries on the development machine are recorded in [devel
 
 Native user/test ZIP construction and original third-party notices are recorded in [release asset tooling checks](release-assets-2026-11-19.md). These are development assets; formal acceptance and publication remain pending.
 
+Tag/candidate/evidence/OIDC/recovery tooling, synthetic state tests and actual selected-tool x64 construction are recorded in [release orchestration checks](release-pipeline-2026-11-20.md). Repository setup uses the existing local gh identity; CI checks actual immutable publication without an App. No real channel operation has run.
+
 | Requirement | Current status |
 | --- | --- |
 | Native x64 and ARM64 hosted checks | Workflow implemented; remote execution pending |
@@ -34,7 +36,7 @@ Native user/test ZIP construction and original third-party notices are recorded 
 | Deep/wide scaling and representative live-query baselines | Generator/private-hive readback and consumer checked; twelve aggregate-only development live observations recorded, all incomplete; actual CLI VM/formal series not run |
 | Portable candidate test bundles and DLL checks | Development builder, x64 DLL checks and relocated tests passed; frozen candidates, ARM64 and clean minimum systems pending |
 | Production/test distribution materials and user ZIPs | Implemented; both Windows dependency graphs checked; local native x64 asset checks passed; native ARM64 execution and final distribution review pending |
-| Candidate source/ZIP hashes and repeatable Cargo archive | Release implementation pending |
-| First local crates.io initialization, Trusted Publisher, registry installs and immutable release | Release implementation pending |
+| Candidate source/ZIP hashes and repeatable Cargo archive | Construction/freezing/recovery implemented; local clean x64 repetition and state model checked; actual frozen tagged candidate pending |
+| First local crates.io initialization, Trusted Publisher, registry installs and immutable release | Scripts/workflow implemented; existing local identity handles repository setup, no App/PAT fallback; real channel execution pending |
 
 Later versioned records must identify commit/candidate, actual OS build and host/process/target architecture, compiler/SDK, user token/setup privileges, input fixture ownership, exact commands/output/exit/cleanup, and CLI/source/ZIP/test-bundle hashes. An unexecuted or missing case is never pass. Keep raw/structured evidence and test bundles with the final Release, with stable pointers here; Actions artifacts alone are temporary.

@@ -15,6 +15,12 @@ $global:RegQryReleaseModel.fakeCommit = 'a' * 40
 $global:RegQryReleaseModel.remote = $null; $global:RegQryReleaseModel.remoteFiles = @{}; $global:RegQryReleaseModel.nextId = 1; $global:RegQryReleaseModel.writes = 0
 $global:RegQryReleaseModel.remoteFailure = $false; $global:RegQryReleaseModel.downloadCorruption = $false; $global:RegQryReleaseModel.uploadFailure = $false
 $global:RegQryReleaseModel.checkoutFailure = ''; $global:RegQryReleaseModel.packageVersion = '0.1.0'
+$global:RegQryReleaseModel.httpRequests = 0; $global:RegQryReleaseModel.settingsReads = 0
+
+function Invoke-WebRequest {
+    $global:RegQryReleaseModel.httpRequests++
+    throw 'Synthetic model forbids unmocked HTTP'
+}
 
 function Test-ReleaseCase {
     param([string]$Name, [scriptblock]$Body)
@@ -50,11 +56,13 @@ function gh {
     if ($global:RegQryReleaseModel.remoteFailure) { $global:LASTEXITCODE = 1; return }
     if ($arguments[0] -ceq 'api') {
         $endpoint = @($arguments | Where-Object { $_ -like 'repos/*' })[0]
-        if ($endpoint -ceq 'repos/inaku-Gyan/RegQry') { '{"id":1462950131,"full_name":"inaku-Gyan/RegQry","default_branch":"main"}'; return }
+        if ($endpoint -ceq 'repos/inaku-Gyan/RegQry') { '{"id":1462950131,"full_name":"inaku-Gyan/RegQry","default_branch":"main","permissions":{"admin":true,"push":' + $(if ($global:RegQryReleaseModel.noPushVisibility) { 'false' } else { 'true' }) + '}}'; return }
         if ($endpoint -match '/commits/') { $global:RegQryReleaseModel.fakeCommit; return }
         if ($endpoint -match '/releases\?') { if ($global:RegQryReleaseModel.remote) { '[[' + ($global:RegQryReleaseModel.remote | ConvertTo-Json -Depth 40 -Compress) + ']]' } else { '[[]]' }; return }
         if ($endpoint -match '/assets\?') { '[' + (ConvertTo-Json -InputObject @($global:RegQryReleaseModel.remote.assets) -Depth 40 -Compress) + ']'; return }
         if ($endpoint -match '/immutable-releases$') {
+            if ($arguments -contains 'PUT') { $global:RegQryReleaseModel.writes++; $global:RegQryReleaseModel.settingsEnabled = $true; return }
+            $global:RegQryReleaseModel.settingsReads++
             if ($global:RegQryReleaseModel.settingsDenied) { $global:LASTEXITCODE = 1; return }
             '{"enabled":' + $(if ($global:RegQryReleaseModel.settingsEnabled) { 'true' } else { 'false' }) + '}'
             return
@@ -193,6 +201,11 @@ try {
     Test-ReleaseCase 'candidate validates both native model identities' { Assert-ReleaseCandidate $candidate 'v0.1.0' $global:RegQryReleaseModel.fakeCommit }
     Test-ReleaseCase 'frozen rerun performs no writes or builds' { $before = $global:RegQryReleaseModel.writes; & $modelScript -Action Freeze -Tag 'v0.1.0' -InputDirectory $buildRoot -OutputDirectory (Join-Path $fixtureRoot 'freeze-retry') | Out-Null; if ($global:RegQryReleaseModel.writes -ne $before) { throw 'Frozen retry mutated assets' } }
     Test-ReleaseCase 'dispatch reads original candidate without rebuilding' { $env:GITHUB_EVENT_NAME = 'workflow_dispatch'; try { & $modelScript -Action Inspect -Tag 'v0.1.0' -OutputDirectory (Join-Path $fixtureRoot 'inspect') | Out-Null } finally { Remove-Item Env:\GITHUB_EVENT_NAME }; if ($global:RegQryReleaseModel.writes -ne 7) { throw 'Recovery changed the assets' } }
+    Test-ReleaseCase 'missing push visibility is not interpreted as absence of drafts' {
+        $global:RegQryReleaseModel.noPushVisibility = $true; $before = $global:RegQryReleaseModel.writes
+        try { Assert-Rejected { & $modelScript -Action Inspect -Tag 'v0.1.0' -OutputDirectory (Join-Path $fixtureRoot 'invisible-draft') } 'Draft visibility' } finally { $global:RegQryReleaseModel.noPushVisibility = $false }
+        if ($global:RegQryReleaseModel.writes -ne $before) { throw 'Filtered visibility caused a write' }
+    }
     Test-ReleaseCase 'changed same-name asset stops without clobber' {
         $sourceAsset = @($candidate.assets | Where-Object name -ceq $source.file)[0]
         $changed = Join-Path (New-ReleaseDirectory (Join-Path $fixtureRoot 'changed')) $source.file
@@ -357,6 +370,35 @@ try {
         }
     }
     $global:RegQryReleaseModel.registryState = 'published'
+    $settingsScript = Join-Path $PSScriptRoot 'configure-release.ps1'
+    Test-ReleaseCase 'local settings status never silently enables a disabled setting' {
+        $global:RegQryReleaseModel.settingsEnabled = $false; $before = $global:RegQryReleaseModel.writes
+        Assert-Rejected { & $settingsScript -ReportPath (Join-Path $fixtureRoot 'settings-disabled.json') } 'not enabled'
+        if ($global:RegQryReleaseModel.writes -ne $before) { throw 'Read-only status changed repository settings' }
+    }
+    Test-ReleaseCase 'explicit local setup enables immutable releases then reads actual state' {
+        & $settingsScript -EnableImmutable -ReportPath (Join-Path $fixtureRoot 'settings-enabled.json') | Out-Null
+        $settings = Read-ReleaseJson (Join-Path $fixtureRoot 'settings-enabled.json')
+        if ($settings.status -cne 'pass' -or -not $settings.settings.enabled) { throw 'Setup failed to verify enabled state' }
+    }
+    Test-ReleaseCase 'enabled local settings verification is read only' {
+        $before = $global:RegQryReleaseModel.writes
+        & $settingsScript -ReportPath (Join-Path $fixtureRoot 'settings-verified.json') | Out-Null
+        if ($global:RegQryReleaseModel.writes -ne $before) { throw 'Verification wrote settings' }
+    }
+    Test-ReleaseCase 'CI Cargo inspection requires no administrator settings access' {
+        $global:RegQryReleaseModel.settingsDenied = $true; $before = $global:RegQryReleaseModel.settingsReads
+        try { & $modelScript -Action CargoStatus -Tag 'v0.1.0' -EvidenceDirectory $evidenceRoot -OutputDirectory (Join-Path $fixtureRoot 'cargo-no-admin') | Out-Null } finally { $global:RegQryReleaseModel.settingsDenied = $false }
+        if ($global:RegQryReleaseModel.settingsReads -ne $before) { throw 'CI queried administrator settings' }
+    }
+    function rustup { throw 'Synthetic model forbids actual native installation' }
+    Test-ReleaseCase 'registry input rejects a different candidate before installation' {
+        Assert-Rejected { & $modelScript -Action RegistryInstall -Tag 'v0.1.0' -CandidatePath $candidatePath -ExpectedCandidateSha256 ('f' * 64) -OutputDirectory (Join-Path $fixtureRoot 'wrong-install-input') } 'accepted candidate ID'
+    }
+    Test-ReleaseCase 'registry worker uses pinned local candidate without GitHub draft access' {
+        $global:RegQryReleaseModel.remoteFailure = $true
+        try { Assert-Rejected { & $modelScript -Action RegistryInstall -Tag 'v0.1.0' -CandidatePath $candidatePath -ExpectedCandidateSha256 $candidateId -OutputDirectory (Join-Path $fixtureRoot 'local-install-input') } 'forbids actual native installation' } finally { $global:RegQryReleaseModel.remoteFailure = $false }
+    }
     $global:RegQryReleaseModel.remote.assets = @($global:RegQryReleaseModel.remote.assets | Where-Object name -cne 'example.txt')
     $global:RegQryReleaseModel.remoteFiles.Remove('example.txt')
     $installRoot = New-ReleaseDirectory (Join-Path $fixtureRoot 'registry-installs')
@@ -380,23 +422,22 @@ try {
         & $modelScript -Action Finalize -Tag 'v0.1.0' -InputDirectory $installRoot -OutputDirectory (Join-Path $fixtureRoot 'finalize-complete-retry') | Out-Null
         if ($global:RegQryReleaseModel.writes -ne $before) { throw 'Retry rewrote final assets' }
     }
-    Test-ReleaseCase 'unreadable immutable setting blocks before publication' {
-        $global:RegQryReleaseModel.settingsDenied = $true; $before = $global:RegQryReleaseModel.writes
-        try { Assert-Rejected { & $modelScript -Action Publish -Tag 'v0.1.0' -OutputDirectory (Join-Path $fixtureRoot 'publish-settings-denied') } 'unknown' } finally { $global:RegQryReleaseModel.settingsDenied = $false }
-        if (-not $global:RegQryReleaseModel.remote.draft -or $global:RegQryReleaseModel.writes -ne $before) { throw 'Unreadable settings still published' }
-    }
-    Test-ReleaseCase 'disabled immutable setting blocks before publication' {
+    Test-ReleaseCase 'unexpected mutable publication is reported without automatic rollback' {
         $global:RegQryReleaseModel.settingsEnabled = $false
-        Assert-Rejected { & $modelScript -Action Publish -Tag 'v0.1.0' -OutputDirectory (Join-Path $fixtureRoot 'publish-settings-disabled') } 'Immutable releases'
-        if (-not $global:RegQryReleaseModel.remote.draft) { throw 'Disabled immutability still published' }
+        Assert-Rejected { & $modelScript -Action Publish -Tag 'v0.1.0' -OutputDirectory (Join-Path $fixtureRoot 'publish-settings-disabled') } 'not immutable'
+        if ($global:RegQryReleaseModel.remote.draft) { throw 'Partial public state was misreported as a draft' }
+        # Reset only the synthetic server for the next independent scenario.
+        $global:RegQryReleaseModel.remote.draft = $true
     }
     Test-ReleaseCase 'remote publication succeeded but command failed: next run only verifies' {
         $global:RegQryReleaseModel.settingsEnabled = $true; $global:RegQryReleaseModel.publishFailure = $true
+        $global:RegQryReleaseModel.settingsDenied = $true; $settingsReads = $global:RegQryReleaseModel.settingsReads
         Assert-Rejected { & $modelScript -Action Publish -Tag 'v0.1.0' -OutputDirectory (Join-Path $fixtureRoot 'publish-interrupted') } 'unknown'
         if ($global:RegQryReleaseModel.remote.draft -or -not $global:RegQryReleaseModel.remote.immutable) { throw 'Synthetic public state was not reached' }
         $before = $global:RegQryReleaseModel.writes
         & $modelScript -Action Publish -Tag 'v0.1.0' -OutputDirectory (Join-Path $fixtureRoot 'publish-reconciled') | Out-Null
         if ($global:RegQryReleaseModel.writes -ne $before) { throw 'Recovery repeated publication' }
+        if ($global:RegQryReleaseModel.settingsReads -ne $settingsReads) { throw 'CI promotion required administrator settings access' }
     }
     Test-ReleaseCase 'complete source inventory rejects an added file' {
         [IO.File]::WriteAllText((Join-Path $sourceRoot 'extra.txt'), 'extra')

@@ -109,6 +109,12 @@ function Get-ReleaseRemote {
     }
 }
 
+function Assert-ReleaseImmutableSettings {
+    param([string]$Repository)
+    $settings = (Invoke-ReleaseGh @('api', "repos/$Repository/immutable-releases")) -join "`n" | ConvertFrom-Json
+    if ($settings.enabled -ne $true) { throw 'Immutable releases must be enabled and readable before publication' }
+}
+
 function Get-ReleaseAsset {
     param([string]$Repository, [object]$Asset, [string]$Directory)
     $path = Join-Path $Directory $Asset.name

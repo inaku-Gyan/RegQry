@@ -8,6 +8,8 @@ param(
     [string]$EvidenceDirectory,
     [string]$EvidenceUrl,
     [string]$EvidenceSha256,
+    [string]$CandidatePath,
+    [string]$ExpectedCandidateSha256,
     [switch]$LocalBootstrap
 )
 $ErrorActionPreference = 'Stop'
@@ -33,6 +35,7 @@ function Get-FrozenCandidate {
     Assert-ReleaseCandidate $candidate $Tag $checkout.commit
     if (-not $AllowMissingAssets) { Assert-ReleaseRemoteCandidate $candidate $release }
     $record.candidateId = Get-ReleaseHash $path
+    Set-ReleaseOutput candidate_id $record.candidateId
     [ordered]@{ candidate = $candidate; release = $release; path = $path }
 }
 function Read-AcceptanceInput {
@@ -62,11 +65,15 @@ function Read-AcceptanceInput {
 }
 try {
     $checkout = Get-ReleaseCheckout $projectRoot $Tag
-    $repo = (Invoke-ReleaseGh @('api', "repos/$Repository")) -join "`n" | ConvertFrom-Json
-    if ($repo.id -ne 1462950131 -or $repo.full_name -cne $Repository -or $repo.default_branch -cne 'main') { throw 'Remote repository identity changed' }
-    $remoteCommit = (Invoke-ReleaseGh @('api', "repos/$Repository/commits/$Tag", '--jq', '.sha')) -join ''
-    if ($remoteCommit -cne $checkout.commit) { throw 'The actual remote tag moved or differs from the checkout' }
-    $remote = Get-ReleaseRemote $Repository $Tag
+    $localInstallInput = $Action -ceq 'RegistryInstall' -and $CandidatePath
+    if (-not $localInstallInput) {
+        $repo = (Invoke-ReleaseGh @('api', "repos/$Repository")) -join "`n" | ConvertFrom-Json
+        if ($repo.id -ne 1462950131 -or $repo.full_name -cne $Repository -or $repo.default_branch -cne 'main') { throw 'Remote repository identity changed' }
+        if ($Action -ceq 'Inspect' -and $repo.permissions.push -ne $true) { throw 'Draft visibility requires push access; absence cannot be inferred from this listing' }
+        $remoteCommit = (Invoke-ReleaseGh @('api', "repos/$Repository/commits/$Tag", '--jq', '.sha')) -join ''
+        if ($remoteCommit -cne $checkout.commit) { throw 'The actual remote tag moved or differs from the checkout' }
+        $remote = Get-ReleaseRemote $Repository $Tag
+    }
     if ($Action -ceq 'Inspect') {
         if ($remote -and @($remote.assets | Where-Object name -ceq 'candidate-manifest.json').Count -eq 1) {
             $frozen = Get-FrozenCandidate
@@ -160,7 +167,13 @@ try {
             $record.state = 'frozen'
         }
     } else {
-        $frozen = Get-FrozenCandidate -AllowMissingAssets:($Action -ceq 'Restore')
+        if ($localInstallInput) {
+            if ($ExpectedCandidateSha256 -cnotmatch '^[a-f0-9]{64}$' -or (Get-ReleaseHash $CandidatePath) -cne $ExpectedCandidateSha256) { throw 'Registry install input differs from the accepted candidate ID' }
+            $candidateInput = Read-ReleaseJson $CandidatePath
+            Assert-ReleaseCandidate $candidateInput $Tag $checkout.commit
+            $record.candidateId = $ExpectedCandidateSha256
+            $frozen = [ordered]@{ candidate = $candidateInput; path = $CandidatePath; release = $null }
+        } else { $frozen = Get-FrozenCandidate -AllowMissingAssets:($Action -ceq 'Restore') }
         $candidate = $frozen.candidate
         if ($Action -ceq 'Restore') {
             if (-not $InputDirectory -or -not $frozen.release.draft) { throw 'Restore requires preserved original core files and an existing draft' }
@@ -215,6 +228,7 @@ try {
                     else {
                         if ($registry.status -ceq 'bootstrap-required' -and -not $LocalBootstrap) { throw 'New crate requires local bootstrap' }
                         if ($frozen.release.body -match '<!-- regqry-cargo-attempt:') { throw 'A prior upload attempt must be reconciled; do not blindly publish again' }
+                        if ($LocalBootstrap) { Assert-ReleaseImmutableSettings $Repository }
                         $bodyPath = Join-Path $outputRoot 'upload-attempt.md'
                         [IO.File]::WriteAllText($bodyPath, $frozen.release.body + "`n<!-- regqry-cargo-attempt: $($record.candidateId) $([DateTime]::UtcNow.ToString('o')) -->`n", [Text.UTF8Encoding]::new($false))
                         Invoke-ReleaseGh @('release', 'edit', $Tag, '--repo', $Repository, '--notes-file', $bodyPath) | Out-Null
@@ -337,11 +351,9 @@ try {
             $registry = Get-ReleaseRegistry $candidate (New-ReleaseDirectory (Join-Path $outputRoot 'registry-final'))
             if ($registry.status -cne 'published') { throw 'Exact Cargo publication must be confirmed before GitHub promotion' }
             if ($remote.draft) {
-                # The REST endpoint requires Administration:read. If the job's
-                # token cannot read it, fail closed; never substitute a variable
-                # or an operator checkbox for actual platform state.
-                $immutable = (Invoke-ReleaseGh @('api', "repos/$Repository/immutable-releases")) -join "`n" | ConvertFrom-Json
-                if ($immutable.enabled -ne $true) { throw 'Immutable releases must be enabled and readable before publication' }
+                # Immutability is enforced by the repository setting configured
+                # with the maintainer's existing local identity. CI does not read
+                # admin settings; verify the actual public release below.
                 Invoke-ReleaseGh @('release', 'edit', $Tag, '--repo', $Repository, '--draft=false', '--verify-tag') | Out-Null
             }
             $remote = Get-ReleaseRemote $Repository $Tag

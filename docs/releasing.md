@@ -1,6 +1,6 @@
 # Release preparation and assets
 
-RegQry has not published a release. Native assets and the tag/draft/evidence/Cargo/OIDC/recovery workflow are implemented locally. Remote execution, formal acceptance and actual channel publication remain unverified. The immutable-settings read is a known publication blocker under the current GITHUB_TOKEN-only configuration; no GitHub App is used. Development asset or mocked-state checks do not establish a release.
+RegQry has not published a release. Native assets and the tag/draft/evidence/Cargo/OIDC/recovery workflow are implemented locally. Remote workflow execution, formal acceptance and actual channel publication remain unverified. Repository immutability is configured through the maintainer's existing local gh identity; CI needs no App, PAT or administrator-settings token. Development asset or mocked-state checks do not establish a release.
 
 The agreed release route is a `vVERSION` tag on a reviewed commit already merged into `main`. `Cargo.toml` is the version source; Cargo.lock, CLI version, tag, changelog and assets must agree. A version preparation PR reviews the English changelog. Normal development uses ordinary merges. The initial version is 0.1.0; compatible additions and breaking changes increment the minor component during 0.x, fixes increment patch, and breaking changes are explicitly called out. Options, matching semantics, exit statuses and promised output behavior form the compatibility contract.
 
@@ -66,6 +66,8 @@ gh workflow run release.yml --ref v0.1.0 `
 
 Dispatch requires the actual existing tag ref and a frozen candidate. It cannot start a new release or regenerate ZIPs. Main must already contain the workflow definition. See the evidence guide for separate pre-Cargo source-archive acceptance and post-Cargo registry-install evidence; a missing latter record can leave Cargo public while GitHub remains a draft.
 
+Draft [listing visibility requires push access](https://docs.github.com/en/rest/releases/releases#list-releases). Inspect therefore has contents write for visibility, checks the returned push permission and performs only reads. A filtered read-only listing never means that a candidate is absent. Native registry-install workers receive the Cargo job's candidate manifest plus its pinned SHA through the current run's artifact; they need no draft access, retain contents read, and clear GH_TOKEN during source compilation.
+
 The first new crates.io package is bootstrapped locally on Windows only after candidate acceptance. CI always uses official OIDC Trusted Publishing, with no API-token fallback. Release promotion publishes/verifies Cargo first, including the exact registry archive/index hash and both native registry installations, then makes the same GitHub draft public. Preflight repeated Cargo packaging and the actual uploaded registry archive must exactly match the frozen candidate SHA-256. A source-equivalent archive is insufficient.
 
 For the first real version, use the accepted candidate and clean tag on native x64 Windows, Rust/Cargo 1.100.0, and the standard local Cargo credential mechanism. Do not put the short-lived bootstrap credential in command arguments, repository files or CI. The script verifies the candidate's Cargo binary/compiler and repeated archive before publishing:
@@ -85,7 +87,16 @@ Frozen user/test ZIPs and notices are promoted byte for byte. The final asset se
 
 The validation archive includes original external records, both native registry-install logs and embedded candidate build logs. It excludes build-manifest/SHA256SUMS; build-manifest excludes its own hash. Finalization retries reuse the original remote validation ZIP and build manifest, then fill only missing deterministic checksum material. `Publish` downloads the complete nine-asset set, checks inventories, current registry bytes and final evidence before promoting that same draft. A public-success/command-failure retry only verifies actual state.
 
-**Unresolved settings permission:** GitHub's [immutable settings API](https://docs.github.com/en/rest/repos/repos#check-if-immutable-releases-are-enabled-for-a-repository) requires Administration read. The workflow's GITHUB_TOKEN does not grant that permission. The user declined adding a GitHub App; no App action, key or PAT has been introduced. `Publish` currently fails closed when this live read is denied. Resolving this access/verification constraint remains necessary before automatic public promotion; a repository variable, stale snapshot or checkbox is not substituted for the live check. Repository immutable settings have not been changed by this implementation.
+**Repository setup without an App:** the [settings API](https://docs.github.com/en/rest/repos/repos#check-if-immutable-releases-are-enabled-for-a-repository) requires administrator permissions, so use the existing local maintainer gh login for initial setup. This fulfills the agreed enable-and-verify requirement without introducing a CI credential. The script checks the canonical repository ID and current administrator access, performs an explicit enable only when requested, then reads the actual setting and saves a credential-free record:
+
+```powershell
+# Initial setup; no tag/release/package is created.
+./scripts/configure-release.ps1 -EnableImmutable
+# Read-only check during later release preparation, before pushing its tag.
+./scripts/configure-release.ps1
+```
+
+Keep this repository setting enabled. GitHub [enforces immutability when the draft is published](https://docs.github.com/en/code-security/concepts/supply-chain-security/immutable-releases). CI validates the actual public release's immutable flag and downloads/hashes, using GITHUB_TOKEN; it does not treat a saved setup record or variable as a live settings read. If an administrator disables the setting, the actual mutable publication is reported as partial failure afterward; the workflow never deletes/reopens it or replaces assets. A changed public artifact needs a new version. This avoids the unnecessary per-run administrator-read/App requirement. First local Cargo bootstrap additionally checks the setting through that same existing local identity.
 
 Recovery reads actual remote state first: same version/name and hash skips an already completed step, a missing core draft asset can use `-Action Restore -InputDirectory ORIGINAL_CORE_FILES`, and any differing hash stops. Restore validates all five originals first, then re-uploads only missing attachments. A restored attachment gets a new server ID; its original candidate ID remains trace metadata and content identity must still match exactly. A missing original candidate manifest or unrecoverable bytes blocks automation rather than creating a new identity. Scripts never overwrite assets, move/reuse a published tag, rebuild frozen ZIPs, or roll back an already public channel.
 
