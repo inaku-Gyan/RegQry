@@ -99,12 +99,13 @@ try {
     $result.cleanup = 'VM_ROLLBACK_REQUIRED'
     $cases = if ($Phase -eq 'Prepare') { @('vm_prepare') } else { @('vm_roots_and_physical_views', 'vm_minimum_permissions_and_partial_failure', 'vm_link_sources_explicit_aliases_cycles_and_lookalikes', 'processes::vm_cli_processes') }
     foreach ($case in $cases) {
+        $logName = $case.Replace('::', '.')
         $result.globalHarnessesStarted++
         $ran = Invoke-BundleProcess -Program (Join-Path $PSScriptRoot $inventory[0].path) -Arguments @('--ignored', '--exact', $case, '--test-threads=1', '--nocapture') -TimeoutSeconds 180
-        [IO.File]::WriteAllText((Join-Path $reportRoot ($case + '.stdout.txt')), $ran.stdout, [Text.UTF8Encoding]::new($false))
-        [IO.File]::WriteAllText((Join-Path $reportRoot ($case + '.stderr.txt')), $ran.stderr, [Text.UTF8Encoding]::new($false))
+        [IO.File]::WriteAllText((Join-Path $reportRoot ($logName + '.stdout.txt')), $ran.stdout, [Text.UTF8Encoding]::new($false))
+        [IO.File]::WriteAllText((Join-Path $reportRoot ($logName + '.stderr.txt')), $ran.stderr, [Text.UTF8Encoding]::new($false))
         $passed = -not $ran.timedOut -and $ran.exitCode -eq 0 -and $ran.stdout.Contains('test result: ok. 1 passed; 0 failed; 0 ignored;')
-        $result.cases += [ordered]@{ name = $case; status = $(if ($passed) { 'pass' } else { 'fail' }); arguments = $ran.arguments; exitCode = $ran.exitCode; timedOut = $ran.timedOut; elapsedMs = $ran.elapsedMs; stdout = $case + '.stdout.txt'; stderr = $case + '.stderr.txt' }
+        $result.cases += [ordered]@{ name = $case; status = $(if ($passed) { 'pass' } else { 'fail' }); arguments = $ran.arguments; exitCode = $ran.exitCode; timedOut = $ran.timedOut; elapsedMs = $ran.elapsedMs; stdout = $logName + '.stdout.txt'; stderr = $logName + '.stderr.txt' }
     }
     if (@($result.cases | Where-Object status -ne 'pass').Count -ne 0) { throw 'VM suite failed; preserve records and roll back the disposable VM' }
     if ($Phase -eq 'Prepare') {

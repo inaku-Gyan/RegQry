@@ -109,9 +109,10 @@ try {
     # Direct --ignored cannot bypass the harness's independent Rust guard.
     foreach ($name in $saved.Keys) { Remove-Item -LiteralPath ('Env:\' + $name) -ErrorAction SilentlyContinue }
     foreach ($case in @('vm_prepare', 'vm_roots_and_physical_views', 'vm_minimum_permissions_and_partial_failure', 'vm_link_sources_explicit_aliases_cycles_and_lookalikes', 'processes::vm_cli_processes')) {
+        $logName = $case.Replace('::', '.')
         $ran = Invoke-BundleProcess -Program (Join-Path $bundle $harness[0].path) -Arguments @('--ignored', '--exact', $case, '--nocapture')
-        [IO.File]::WriteAllText((Join-Path $reportRoot ($case + '.stdout.txt')), $ran.stdout, [Text.UTF8Encoding]::new($false))
-        [IO.File]::WriteAllText((Join-Path $reportRoot ($case + '.stderr.txt')), $ran.stderr, [Text.UTF8Encoding]::new($false))
+        [IO.File]::WriteAllText((Join-Path $reportRoot ($logName + '.stdout.txt')), $ran.stdout, [Text.UTF8Encoding]::new($false))
+        [IO.File]::WriteAllText((Join-Path $reportRoot ($logName + '.stderr.txt')), $ran.stderr, [Text.UTF8Encoding]::new($false))
         if ($ran.timedOut -or $ran.exitCode -eq 0 -or -not $ran.stderr.Contains('missing REGQRY_VM_CONFIRM') -or $ran.stdout.Contains('VM_OPERATION_START') -or $ran.stdout.Contains('FIXTURE_CREATED')) { throw ('Direct ignored test bypassed the VM guard: ' + $case) }
         $result.cases += [ordered]@{ name = 'direct-ignored-' + $case; status = 'pass'; exitCode = $ran.exitCode; globalHarnessesStarted = 0 }
     }
