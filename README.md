@@ -2,7 +2,7 @@
 
 A Windows Registry query CLI written in Rust. Find keys and values using field-specific filters, then inspect their types and data previews. Queries are read-only and stream results as they are found.
 
-The command and Cargo package are both named `regqry`. See [Releases](https://github.com/inaku-Gyan/RegQry/releases) for available versions and the [validation status](https://github.com/inaku-Gyan/RegQry/blob/main/docs/validation/README.md) for executed checks. Version notes are prepared before publication.
+The command and Cargo package are both named `regqry`. Version [0.1.3 is available on GitHub](https://github.com/inaku-Gyan/RegQry/releases/tag/v0.1.3) and [crates.io](https://crates.io/crates/regqry/0.1.3). See the [validation status](https://github.com/inaku-Gyan/RegQry/blob/main/docs/validation/README.md) for actual release checks and deferred coverage.
 
 ```powershell
 regqry --key-root 'HKCU\Software' --key 'terminal'
